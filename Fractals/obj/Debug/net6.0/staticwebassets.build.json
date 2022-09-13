@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "Hash": "01xSK5CM6r0tlU/LV53U3/nPYL/x7jpCd+s5EomMx2U=",
+  "Source": "Fractals",
+  "BasePath": "_content/Fractals",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "Fractals\\wwwroot",
+      "Source": "Fractals",
+      "ContentRoot": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\wwwroot\\",
+      "BasePath": "_content/Fractals",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [
+    {
+      "Identity": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\wwwroot\\favicon.ico",
+      "SourceId": "Fractals",
+      "SourceType": "Discovered",
+      "ContentRoot": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\wwwroot\\",
+      "BasePath": "_content/Fractals",
+      "RelativePath": "favicon.ico",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot\\favicon.ico"
+    }
+  ]
+}

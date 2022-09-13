@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "J7OGmoDsoW8XPdXP14CFXd22f/ccr3rvr3e6sTPHptPfFpjHRdTR3kzP7rqQcO6p2tRtF4OkP0B6euMDvOC0sA==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\Fractals.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.aspnetcore.spaproxy\\6.0.8\\microsoft.aspnetcore.spaproxy.6.0.8.nupkg.sha512"
+  ],
+  "logs": []
+}
