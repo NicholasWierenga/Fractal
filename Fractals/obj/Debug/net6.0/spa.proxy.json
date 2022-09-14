@@ -2,7 +2,7 @@
 "SpaProxyServer": {
 "ServerUrl": "https://localhost:44488",
 "LaunchCommand": "npm start",
-"WorkingDirectory": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\ClientApp\\",
+"WorkingDirectory": "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\ClientApp\\",
 "MaxTimeoutInSeconds": "120"
 }
 }

@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\Fractals.csproj": {}
+    "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\Fractals.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\Fractals.csproj": {
+    "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\Fractals.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\Fractals.csproj",
+        "projectUniqueName": "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\Fractals.csproj",
         "projectName": "Fractals",
-        "projectPath": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\Fractals.csproj",
+        "projectPath": "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\Fractals.csproj",
         "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Administrator\\source\\repos\\Fractals\\Fractals\\obj\\",
+        "outputPath": "C:\\Users\\Administrator\\Documents\\GitHub\\Fractal\\Fractals\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config",
