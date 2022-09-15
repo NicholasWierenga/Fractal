@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Point } from '../point';
 import * as PlotlyJS from 'plotly.js-dist-min';
-import { create, all, MathJsStatic, Complex, BigNumber } from 'mathjs';
+import { create, all, MathJsStatic, BigNumber } from 'mathjs';
 
 @Component({
   selector: 'app-mandelbrot',
@@ -14,7 +14,7 @@ export class MandelbrotComponent implements OnInit {
     epsilon: 1e-32,
     matrix: 'Matrix',
     number: 'BigNumber',
-    precision: 64,
+    precision: 16,
     predictable: false,
     randomSeed: null
   };
@@ -22,57 +22,123 @@ export class MandelbrotComponent implements OnInit {
   xSteps: number = 100;
   ySteps: number = 100;
   xWindowLower: string = "-2";
-  xWindowUpper: string = "2";
+  xWindowUpper: string = ".5";
   yWindowLower: string = "-2";
   yWindowUpper: string = "2";
+  secondPass: boolean = true; // Will be used in the future for a button on the front-end.
 
   constructor() { } 
   
   findTrace(): void {
-    console.log("in findtrace");
-    let points: Point[] = this.getNewPoints();
+    let timesToCalculate: number = 10;
+
+    let points: Point[] = this.getNewPoints(timesToCalculate);
+
+    console.log("Points found: " + points.length);
 
     this.getGraph(points);
   }
 
-  getNewPoints(): Point[] {
+  getNewPoints(timesToCalculate: number): Point[] {
     let points: Point[] = [];
-    let pointVal: Complex;
-    let previousVals: Complex[] = [];
-    let startingVal: Complex;
     let xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
     let yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
-    console.log("in get new points");
 
     for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); xVal = xVal.plus(xStepDistance)) {
       for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); yVal = yVal.plus(yStepDistance)) {
-        startingVal = this.math.complex(`${xVal.toString()} + ${yVal.toString()}i`);
-        console.log("startingVal: " + startingVal.toString())
-        pointVal = startingVal;
-
-        for (let count: number = 1; count < 5; count++) {
-          pointVal = this.math.complex(this.math.add(this.math.pow(pointVal, 2), startingVal).toString());
-
-          if (previousVals.findIndex(val => val.re == pointVal.re && val.im == pointVal.im) !== -1) {
-            points.push({xcoord: xVal.toString(), ycoord: `${yVal}`, zcoord: null});
-
-            console.log("found a good point, which is: " + pointVal.toString());
-
-            break;
-          }
-
-          previousVals.push(pointVal);
+        if (this.vibeCheck(xVal, yVal, timesToCalculate, 1)) {
+          points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
         }
-
       }
     }
 
-    console.log("Printing out good values below: ");
-    points.forEach(point => {
-      console.log(point.xcoord + " + " + point.ycoord);
-    });
-
     return points;
+  }
+
+  // Numbers in the mandelbrot set form patterns as the are squaredThenAdded to and trend toward a small 
+  // set of numbers which that is rarely ever reached. Instead, these numbers 'vibrate' around the numbers
+  // This function determines if there exists a trend for the number being looked at.
+  vibeCheck(startReal: BigNumber, startImaginary: BigNumber, timesToCalculate: number, 
+  passNum: number, seedReal?: BigNumber, seedImaginary?: BigNumber): boolean {
+    let epsilon = this.math.bignumber(1 / timesToCalculate);
+    let previousVals: string[] = [];
+    let pointVal: string = "";
+    let isIn: boolean = false;
+
+    for (let count: number = 0; count < timesToCalculate; count++) {
+      if (count == 0) {
+        pointVal = this.squareThenAdd(`${seedReal || 0} + ${seedImaginary || 0}i`, `${startReal} + ${startImaginary}i`);
+      }
+      else {
+        pointVal = this.squareThenAdd(pointVal, `${startReal.toString()} + ${startImaginary.toString()}i`);
+      }
+
+      previousVals.forEach(val => {
+        if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
+        &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
+            this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
+         isIn = true;
+
+         return;
+        }
+      });
+
+      if (isIn) {
+        // Doing a second pass allows the program to weed out points that were erroneously passed earlier. It also allows
+        // for points that did not pass up to this point to not be checked further as they're likely not supposed to be in the
+        // set, which saves a lot of the calculations.
+        if (passNum == 1 && this.secondPass) {
+          // TODO: Try getting this to fire only after previousVals is filled. It could be the case that we find a point
+          // that happens to be quite close to a previous one and lead the point to be a false positive. It could also pose
+          // issues because timesToCalculate is used to determine how strict comparisons must be to say there is a trend.
+          return this.vibeCheck(this.math.bignumber(pointVal.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[2]
+          .replace("i", "")), timesToCalculate * 5, 2, startReal, startImaginary);
+        }
+        else {
+          return true;
+        }
+      }
+
+      previousVals.push(pointVal);
+    }
+
+    return false;
+  }
+
+  // Using MathJS pow and add cause floating point errors when working with complex-type numbers, so we pass 
+  // strings for complex numbers over here and do the math with them and then returns a precise complex number as a string.
+  squareThenAdd(currentComplex: string, addComplex: string): string {
+    let currentReal: string = currentComplex.split(" ")[0];
+    let currentImaginary: string = "0";
+    if (currentComplex.includes("i")) {
+      currentImaginary = currentComplex.split(" ")[2].replace("i", "");
+    }
+    
+    let addReal: string = addComplex.split(" ")[0];
+    let addImaginary: string = "0";
+    if (addComplex.includes("i")) {
+      addImaginary = addComplex.split(" ")[2].replace("i", "");
+    }
+
+    // This looks random, but is the result of combining like terms for 
+    // the expression (currentReal+currentImaginary*i)^2+(addReal + addImaginary*i).
+    return `${this.math.bignumber(currentReal).pow(2).add(this.math.bignumber(addReal))
+      .minus(this.math.bignumber(currentImaginary).pow(2))} + ${this.math.bignumber(currentReal)
+      .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
+  }
+
+  // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
+  // Because of that, these functions should act as a workaround for comparing two very small numbers.
+  isEqual(leftNumber: BigNumber, rightNumber: BigNumber, epsilon: BigNumber): boolean {
+    if (leftNumber.toString() === rightNumber.toString()) {
+      return true;
+    }
+
+    return this.isLessThan(this.math.abs(leftNumber.minus(rightNumber)), epsilon);
+  }
+
+  isLessThan(leftNumber: BigNumber, rightNumber: BigNumber): boolean {
+    return this.math.isNegative(leftNumber.minus(rightNumber));
   }
 
   getGraph(points: Point[]): void {
@@ -86,19 +152,19 @@ export class MandelbrotComponent implements OnInit {
     PlotlyJS.newPlot("plotlyChart", [trace], layout);
   }
 
-  getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
-    var trace: Partial<PlotlyJS.PlotData> = {
+  getTrace(points: Point[]): any {
+    var trace = {
       x: points.map(point => point.xcoord),
       y: points.map(point => point.ycoord),
-      //autobinx: false,
-      //xbins: {
-      //  start: -3,
-      //  end: 3,
-      //  size: 0.01
-      //},
-      //type: 'histogram2d',
       mode: 'markers',
-      type: "scatter",
+      name: '',
+      marker: {
+        color: 'rgb(102,0,0)',
+        size: 3,
+        opacity: .6
+      },
+      type: 'scatter',
+      hovertemplate: `(%{x}, %{y}i)`
     };
 
     return trace;
@@ -108,3 +174,12 @@ export class MandelbrotComponent implements OnInit {
     
   }
 }
+
+// Later TODO: Add a "more resolution" button that adds more points to the current set of points.
+// This could look like taking the steps, finding the step distance, then halving that.
+// With that, add it to the lowerWindow and minus it from the upper window.
+// This would create the effect of nearly double the number of points.
+
+// Later TODO: Instead of doing a 2nd pass, allow for n number of passes. Instead of using a 
+// bool to know if we should do another pass, have a pass number and keep decrementing it and
+// calling the function again until it hits a certain point and that will be the final pass.
