@@ -11,7 +11,7 @@ import { create, all, MathJsStatic, BigNumber } from 'mathjs';
 
 export class MandelbrotComponent implements OnInit {
   config: math.ConfigOptions = {
-    epsilon: 1e-32,
+    epsilon: 1e-12,
     matrix: 'Matrix',
     number: 'BigNumber',
     precision: 16,
@@ -26,64 +26,64 @@ export class MandelbrotComponent implements OnInit {
   yWindowLower: string = "-2";
   yWindowUpper: string = "2";
   secondPass: boolean = true; // Will be used in the future for a button on the front-end.
+  xStepDistance!: BigNumber;
+  yStepDistance!: BigNumber;
+  timesToCalculate: number = 10;
 
   constructor() { } 
   
   findTrace(): void {
-    let timesToCalculate: number = 10;
-
-    let points: Point[] = this.getNewPoints(timesToCalculate);
+    let points: Point[] = this.getNewPoints();
 
     console.log("Points found: " + points.length);
 
     this.getGraph(points);
   }
 
-  getNewPoints(timesToCalculate: number): Point[] {
+  getNewPoints(): Point[] {
     let points: Point[] = [];
-    let xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
-    let yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
-    let neighborsToCheck = this.math.bignumber("3");
-    let count: number = 0;
+    this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
+    this.yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
 
     for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
-    xVal = xVal.plus(xStepDistance)) {
+    xVal = xVal.plus(this.xStepDistance)) {
       for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
-      yVal = yVal.plus(yStepDistance)) {
-        if (this.vibeCheck(xVal, yVal, timesToCalculate)) {
+      yVal = yVal.plus(this.yStepDistance)) {
+        if (this.vibeCheck(xVal, yVal, this.timesToCalculate)) {
           points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
-          count++;
 
-          // When a point is found, there's other points found nearby that are also in the set.
-          // This loop looks through nearby points to see if they are also good.
-          for (let nearXVal: BigNumber = xVal.minus(xStepDistance); 
-          this.isLessThan(nearXVal, xVal.plus(xStepDistance)); nearXVal = nearXVal.plus(xStepDistance.div(neighborsToCheck).times("2"))) {
-            for (let nearYVal: BigNumber = yVal.minus(yStepDistance); 
-            this.isLessThan(nearYVal, yVal.plus(yStepDistance)); nearYVal = nearYVal.plus(yStepDistance.div(neighborsToCheck).times("2"))) {
-              //console.log("nearXVal: " + nearXVal.toString());
-              //console.log("nearYVal: " + nearYVal.toString());
+          this.findNeighbors(xVal, yVal, this.math.bignumber("3")).forEach((point) => {
+            points.push(point);
+          });
+        }
+      }
+    }
 
-              // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
-              // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
+    return points;
+  }
 
-              // To avoid calculating the point and re-adding the same point we already found prior to the loop.
-              if (nearXVal != xVal && nearYVal != yVal) {
-                //|| this.isLessThan(nearXVal.plus(xStepDistance.div(neighborsToCheck)), xVal.plus(xStepDistance)) 
-                //|| this.isLessThan(nearYVal.plus(yStepDistance.div(neighborsToCheck)), xVal.plus(yStepDistance))
-                continue;
-              }
+  findNeighbors(xVal: BigNumber, yVal: BigNumber, neighborsToCheck: BigNumber): Point[] {
+    let points: Point[] = [];
+    let epsilon: BigNumber = this.math.bignumber("1e-12");
 
-              if (this.vibeCheck(nearXVal, nearYVal, timesToCalculate)) {
-                count++;
+    // When a point is found, there's other points found nearby that are also in the set.
+    // This loop looks through nearby points to see if they are also good.
+    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance); this.isLessThan(nearXVal, xVal.plus(this.xStepDistance)); 
+    nearXVal = nearXVal.plus(this.xStepDistance.div(neighborsToCheck).times("2"))) {
+      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance); this.isLessThan(nearYVal, yVal.plus(this.yStepDistance)); 
+      nearYVal = nearYVal.plus(this.yStepDistance.div(neighborsToCheck).times("2"))) {
+        // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
+        // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
 
-                if (count % 1000) {
-                  console.log("found a thousand more points");
-                }
+        // To avoid calculating the point and re-adding the same point we already found prior to the loop.
+        if (this.isEqual(nearXVal, xVal, epsilon) && this.isEqual(nearYVal, yVal, epsilon)) {
+          //|| this.isLessThan(nearXVal.plus(xStepDistance.div(neighborsToCheck)), xVal.plus(xStepDistance)) 
+          //|| this.isLessThan(nearYVal.plus(yStepDistance.div(neighborsToCheck)), xVal.plus(yStepDistance))
+          continue;
+        }
 
-                points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
-              }
-            }
-          }
+        if (this.vibeCheck(nearXVal, nearYVal)) {
+          points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
         }
       }
     }
@@ -94,14 +94,13 @@ export class MandelbrotComponent implements OnInit {
   // Numbers in the mandelbrot set form patterns as the are squaredThenAdded to and trend toward a small 
   // set of numbers which that is rarely ever reached. Instead, these numbers 'vibrate' around the numbers
   // This function determines if there exists a trend for the number being looked at.
-  vibeCheck(startReal: BigNumber, startImaginary: BigNumber, timesToCalculate: number, 
-  passNum?: number, seedReal?: BigNumber, seedImaginary?: BigNumber): boolean {
-    let epsilon: BigNumber = this.math.bignumber(1 / timesToCalculate);
+  vibeCheck(startReal: BigNumber, startImaginary: BigNumber, passNum?: number, seedReal?: BigNumber, seedImaginary?: BigNumber): boolean {
+    let epsilon: BigNumber = this.math.bignumber(1 / this.timesToCalculate);
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
 
-    for (let count: number = 0; count < timesToCalculate; count++) {
+    for (let count: number = 0; count < this.timesToCalculate; count++) {
       if (count == 0) {
         pointVal = this.squareThenAdd(`${seedReal || 0} + ${seedImaginary || 0}i`, `${startReal} + ${startImaginary}i`);
       }
@@ -128,7 +127,7 @@ export class MandelbrotComponent implements OnInit {
           // that happens to be quite close to a previous one and lead the point to be a false positive. It could also pose
           // issues because timesToCalculate is used to determine how strict comparisons must be to say there is a trend.
           return this.vibeCheck(this.math.bignumber(pointVal.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[2]
-          .replace("i", "")), timesToCalculate, 2, startReal, startImaginary);
+          .replace("i", "")), 2, startReal, startImaginary);
         }
         else {
           return true;
@@ -207,7 +206,6 @@ export class MandelbrotComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    
   }
 }
 
