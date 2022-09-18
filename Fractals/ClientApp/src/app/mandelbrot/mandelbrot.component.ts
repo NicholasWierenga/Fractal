@@ -23,51 +23,92 @@ export class MandelbrotComponent implements OnInit {
   ySteps: number = 100;
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
-  yWindowLower: string = "-2";
-  yWindowUpper: string = "2";
+  yWindowLower: string = "-1.15";
+  yWindowUpper: string = "1.15";
   secondPass: boolean = true; // Will be used in the future for a button on the front-end.
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
   timesToCalculate: number = 10;
+  pointCount: number = 0;
 
   constructor() { } 
   
   findTrace(): void {
-    let points: Point[] = this.getNewPoints();
+    let count: number = 0;
+    let points: Point[] = [];
 
-    console.log("Points found: " + points.length);
+    this.createGraph();
 
-    this.getGraph(points);
+    setTimeout(() => {
+      this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
+
+      // TODO: Consider splitting this up into blocks then adding the trace. Right now, the graph slows down towards the end
+      // quite a bit.
+      for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
+      xVal = xVal.plus(this.xStepDistance)) {
+        points.push(...this.getNewPoints(xVal));
+        count++;
+
+        console.log(count);
+        if (count % 10 == 0) {
+          console.log("in the mod");
+          this.sendPoints(points);
+
+          points = [];
+        }
+      }
+
+      if (count % 10 !== 0) {
+        console.log("there's some points left");
+        console.log(points);
+        this.sendPoints(points);
+      }
+
+      console.log("Total points: " + this.pointCount);
+    }, 10);
   }
 
-  getNewPoints(): Point[] {
+  createGraph(): void {
+    let layout: Partial<PlotlyJS.Layout> = {
+      xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
+      yaxis: {range: [this.yWindowLower, this.yWindowUpper]},
+      showlegend: false
+    };
+
+    PlotlyJS.newPlot("plotlyChart", [], layout);
+  }
+
+  // This function is to 
+  sendPoints(points: Point[]): void {
+      setTimeout(() => {
+        this.pointCount += points.length;
+
+        this.getGraph(points);
+      }, 10);
+  }
+
+  getNewPoints(xVal: BigNumber): Point[] {
     let points: Point[] = [];
-    this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
     this.yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
 
-    for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
-    xVal = xVal.plus(this.xStepDistance)) {
       for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
       yVal = yVal.plus(this.yStepDistance)) {
         if (this.vibeCheck(xVal, yVal, this.timesToCalculate)) {
           points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
 
-          this.findNeighbors(xVal, yVal, this.math.bignumber("3")).forEach((point) => {
-            points.push(point);
-          });
+          points.push(...this.findNeighbors(xVal, yVal, this.math.bignumber("2")));
         }
       }
-    }
 
     return points;
   }
 
   findNeighbors(xVal: BigNumber, yVal: BigNumber, neighborsToCheck: BigNumber): Point[] {
     let points: Point[] = [];
-    let epsilon: BigNumber = this.math.bignumber("1e-12");
 
     // When a point is found, there's other points found nearby that are also in the set.
     // This loop looks through nearby points to see if they are also good.
+    // TODO: It feels like x-values aren't working right and this is only generating new values with xVal and a different ycoord.
     for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance); this.isLessThan(nearXVal, xVal.plus(this.xStepDistance)); 
     nearXVal = nearXVal.plus(this.xStepDistance.div(neighborsToCheck).times("2"))) {
       for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance); this.isLessThan(nearYVal, yVal.plus(this.yStepDistance)); 
@@ -76,7 +117,7 @@ export class MandelbrotComponent implements OnInit {
         // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
 
         // To avoid calculating the point and re-adding the same point we already found prior to the loop.
-        if (this.isEqual(nearXVal, xVal, epsilon) && this.isEqual(nearYVal, yVal, epsilon)) {
+        if (this.isEqual(nearXVal, xVal) && this.isEqual(nearYVal, yVal)) {
           //|| this.isLessThan(nearXVal.plus(xStepDistance.div(neighborsToCheck)), xVal.plus(xStepDistance)) 
           //|| this.isLessThan(nearYVal.plus(yStepDistance.div(neighborsToCheck)), xVal.plus(yStepDistance))
           continue;
@@ -111,7 +152,7 @@ export class MandelbrotComponent implements OnInit {
       previousVals.forEach(val => {
         if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
         &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
-            this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
+                         this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
          isIn = true;
 
          return;
@@ -164,12 +205,12 @@ export class MandelbrotComponent implements OnInit {
 
   // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
   // Because of that, these functions should act as a workaround for comparing two very small numbers.
-  isEqual(leftNumber: BigNumber, rightNumber: BigNumber, epsilon: BigNumber): boolean {
+  isEqual(leftNumber: BigNumber, rightNumber: BigNumber, overrideEpsilon?: BigNumber): boolean {
     if (leftNumber.toString() === rightNumber.toString()) {
       return true;
     }
 
-    return this.isLessThan(this.math.abs(leftNumber.minus(rightNumber)), epsilon);
+    return this.isLessThan(this.math.abs(leftNumber.minus(rightNumber)), overrideEpsilon ?? this.math.bignumber(this.config.epsilon));
   }
 
   isLessThan(leftNumber: BigNumber, rightNumber: BigNumber): boolean {
@@ -177,25 +218,20 @@ export class MandelbrotComponent implements OnInit {
   }
 
   getGraph(points: Point[]): void {
-    let layout: Partial<PlotlyJS.Layout> = {
-      xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
-      //yaxis: {range: [this.yWindowLower, this.yWindowUpper]}
-    };
-
     var trace: Partial<PlotlyJS.PlotData> = this.getTrace(points);
-    
-    PlotlyJS.newPlot("plotlyChart", [trace], layout);
+
+    PlotlyJS.addTraces("plotlyChart", trace);
   }
 
-  getTrace(points: Point[]): any {
-    var trace = {
+  getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
+    var trace: Partial<PlotlyJS.PlotData> = {
       x: points.map(point => point.xcoord),
       y: points.map(point => point.ycoord),
       mode: 'markers',
       name: '',
       marker: {
         color: 'rgb(102,0,0)',
-        size: 3,
+        size: 2,
         opacity: .6
       },
       type: 'scatter',
@@ -217,3 +253,7 @@ export class MandelbrotComponent implements OnInit {
 // Later TODO: Instead of doing a 2nd pass, allow for n number of passes. Instead of using a 
 // bool to know if we should do another pass, have a pass number and keep decrementing it and
 // calling the function again until it hits a certain point and that will be the final pass.
+
+// Later TODO: Have functionality that removes points between two points if there exists no gaps
+// between them. A gap would be any point along the set of stepped points that isn't in the points array,
+// which is the set of all points that passed the vibeCheck() function.
