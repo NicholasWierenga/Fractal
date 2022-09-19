@@ -19,8 +19,8 @@ export class MandelbrotComponent implements OnInit {
     randomSeed: null
   };
   math: MathJsStatic = create(all, this.config);
-  xSteps: number = 100;
-  ySteps: number = 100;
+  xSteps: number = 50;
+  ySteps: number = 50;
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
   yWindowLower: string = "-1.15";
@@ -32,59 +32,114 @@ export class MandelbrotComponent implements OnInit {
   pointCount: number = 0;
 
   constructor() { } 
+
+  createGraph(): void {
+    console.log("in creategraph");
+    this.pointCount = 0;
+    let layout: Partial<PlotlyJS.Layout> = {
+      xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
+      yaxis: {range: [this.yWindowLower, this.yWindowUpper]},
+      showlegend: false,
+      //dragmode: false,
+      //clickmode: "none",
+      //autosize: false,
+      //hovermode: false
+    };
+
+    console.log(layout.xaxis);
+    console.log(layout.yaxis);
+
+    PlotlyJS.newPlot("plotlyChart", [this.getTrace([])], layout).then( () => {
+      this.messWithGraph();
+
+      this.findTrace();
+    });
+  }
+
+  messWithGraph(): void {
+    var plotlyChart: any = document.getElementById('plotlyChart'); // as PlotlyJS.PlotlyHTMLElement
+    let xWindowString: string = "";
+    let yWindowString: string = "";
+    let isMousedown: boolean = false;
+    
+    var xaxis = plotlyChart._fullLayout.xaxis;
+    var yaxis = plotlyChart._fullLayout.yaxis;
+    var l = plotlyChart._fullLayout.margin.l;
+    var t = plotlyChart._fullLayout.margin.t;  
+
+
+    //plotlyChart.on('plotly_click', (data: { points: string | any[]; }) => {
+    //  var pts = '';
+    //
+    //  for (var i = 0; i < data.points.length; i++) {
+    //    pts = 'x = ' + data.points[i].x + '\ny = ' +
+    //      data.points[i].y!.toString() + '\n\n';
+    //  }
+    //
+    //  alert('Closest point clicked:\n\n' + pts);
+    //});
+    
+    //plotlyChart.on('plotly_click', function(data: any) {
+
+      plotlyChart.addEventListener('mousedown', (evt: any) => {
+        console.log("in mousedown")
+        isMousedown = true;
+        this.xWindowLower = xaxis.p2c(evt.x - l).toString();
+        this.yWindowLower = yaxis.p2c(evt.y - t).toString();
+        
+        //PlotlyJS.relayout(plotlyChart, {'title': ['x: ' + xInDataCoord, 'y : ' + yInDataCoord].join('<br>')});
+    
+      });
+      
+      //plotlyChart.addEventListener('mouseup', (evt: any) => {
+      //  console.log("in mouseup event");
+      //  isMousedown = false;
+      //  this.xWindowUpper = xaxis.p2c(evt.x - l).toString();
+      //  this.yWindowUpper = yaxis.p2c(evt.y - t).toString();
+      //});
+
+        plotlyChart.addEventListener('mouseover', (evt: any) => {
+          if (isMousedown) {
+            console.log("in mouseover event");
+            isMousedown = false;
+            this.xWindowUpper = xaxis.p2c(evt.x - l).toString();
+            this.yWindowUpper = yaxis.p2c(evt.y - t).toString();
+
+            //PlotlyJS.purge('plotlyChart');
+        
+            this.createGraph();
+          }
+        });
+
+    //});
+  }
   
   findTrace(): void {
     let count: number = 0;
     let points: Point[] = [];
+    this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
 
-    this.createGraph();
+    // The setTimeouts are to get plotlyJS time to create and update the graph.
+    //setTimeout(() => {
 
-    setTimeout(() => {
-      this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
-
-      // TODO: Consider splitting this up into blocks then adding the trace. Right now, the graph slows down towards the end
-      // quite a bit.
-      for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
-      xVal = xVal.plus(this.xStepDistance)) {
+    for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); this.isLessThanOrEqualTo(xVal, this.math.bignumber(this.xWindowUpper)); 
+    xVal = xVal.plus(this.xStepDistance)) {
+      setTimeout(() => {
         points.push(...this.getNewPoints(xVal));
         count++;
-
-        console.log(count);
-        if (count % 10 == 0) {
-          console.log("in the mod");
-          this.sendPoints(points);
+        
+        if (count % 10 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
+          this.pointCount += points.length;
+          this.getGraph(points);
 
           points = [];
+
+          console.log("Total points: " + this.pointCount);
         }
-      }
-
-      if (count % 10 !== 0) {
-        console.log("there's some points left");
-        console.log(points);
-        this.sendPoints(points);
-      }
-
-      console.log("Total points: " + this.pointCount);
-    }, 10);
-  }
-
-  createGraph(): void {
-    let layout: Partial<PlotlyJS.Layout> = {
-      xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
-      yaxis: {range: [this.yWindowLower, this.yWindowUpper]},
-      showlegend: false
-    };
-
-    PlotlyJS.newPlot("plotlyChart", [], layout);
-  }
-
-  // This function is to 
-  sendPoints(points: Point[]): void {
-      setTimeout(() => {
-        this.pointCount += points.length;
-
-        this.getGraph(points);
-      }, 10);
+      
+      }, 0)
+    }
+    //});
   }
 
   getNewPoints(xVal: BigNumber): Point[] {
@@ -103,16 +158,17 @@ export class MandelbrotComponent implements OnInit {
     return points;
   }
 
+  // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see if the
+  // neighboring points are valid also.
   findNeighbors(xVal: BigNumber, yVal: BigNumber, neighborsToCheck: BigNumber): Point[] {
     let points: Point[] = [];
 
     // When a point is found, there's other points found nearby that are also in the set.
     // This loop looks through nearby points to see if they are also good.
-    // TODO: It feels like x-values aren't working right and this is only generating new values with xVal and a different ycoord.
     for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance); this.isLessThan(nearXVal, xVal.plus(this.xStepDistance)); 
-    nearXVal = nearXVal.plus(this.xStepDistance.div(neighborsToCheck).times("2"))) {
+    nearXVal = nearXVal.plus(this.xStepDistance.div(neighborsToCheck))) {
       for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance); this.isLessThan(nearYVal, yVal.plus(this.yStepDistance)); 
-      nearYVal = nearYVal.plus(this.yStepDistance.div(neighborsToCheck).times("2"))) {
+      nearYVal = nearYVal.plus(this.yStepDistance.div(neighborsToCheck))) {
         // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
         // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
 
@@ -217,10 +273,16 @@ export class MandelbrotComponent implements OnInit {
     return this.math.isNegative(leftNumber.minus(rightNumber));
   }
 
-  getGraph(points: Point[]): void {
-    var trace: Partial<PlotlyJS.PlotData> = this.getTrace(points);
+  isLessThanOrEqualTo(leftNumber: BigNumber, rightNumber: BigNumber): boolean {
+    if (this.isEqual(leftNumber, rightNumber)) {
+      return true;
+    }
 
-    PlotlyJS.addTraces("plotlyChart", trace);
+    return this.isLessThan(leftNumber, rightNumber);
+  }
+
+  getGraph(points: Point[]): void {
+    PlotlyJS.extendTraces("plotlyChart", {x: [points.map(point => point.xcoord)], y: [points.map(point => point.ycoord)]}, [0]);
   }
 
   getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
@@ -228,14 +290,16 @@ export class MandelbrotComponent implements OnInit {
       x: points.map(point => point.xcoord),
       y: points.map(point => point.ycoord),
       mode: 'markers',
-      name: '',
+      name: ``,
       marker: {
         color: 'rgb(102,0,0)',
         size: 2,
         opacity: .6
       },
       type: 'scatter',
-      hovertemplate: `(%{x}, %{y}i)`
+      // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
+      // as something like 4 + -3i. 
+      hovertemplate: `%{x}+%{y}i`
     };
 
     return trace;
@@ -257,3 +321,7 @@ export class MandelbrotComponent implements OnInit {
 // Later TODO: Have functionality that removes points between two points if there exists no gaps
 // between them. A gap would be any point along the set of stepped points that isn't in the points array,
 // which is the set of all points that passed the vibeCheck() function.
+
+// Later TODO: Add a function to test data after the graph is finished. This function would look for
+// duplicate points. This is to ensure that the findNeighbors() function isn't adding in and calculating
+// unnecessarily.
