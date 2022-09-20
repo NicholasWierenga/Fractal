@@ -30,88 +30,72 @@ export class MandelbrotComponent implements OnInit {
   yStepDistance!: BigNumber;
   timesToCalculate: number = 10;
   pointCount: number = 0;
+  plotlyChart: any;
 
   constructor() { } 
 
   createGraph(): void {
-    console.log("in creategraph");
     this.pointCount = 0;
+
     let layout: Partial<PlotlyJS.Layout> = {
       xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
       yaxis: {range: [this.yWindowLower, this.yWindowUpper]},
-      showlegend: false,
-      //dragmode: false,
-      //clickmode: "none",
-      //autosize: false,
-      //hovermode: false
+      showlegend: false
     };
 
-    console.log(layout.xaxis);
-    console.log(layout.yaxis);
-
-    PlotlyJS.newPlot("plotlyChart", [this.getTrace([])], layout).then( () => {
-      this.messWithGraph();
+    PlotlyJS.newPlot("plotlyChart", [this.getTrace([])], layout).then(() => {
+      this.plotlyChart = document.getElementById('plotlyChart') as PlotlyJS.PlotlyHTMLElement;
 
       this.findTrace();
+
+      this.addGraphListeners();
     });
   }
 
-  messWithGraph(): void {
-    var plotlyChart: any = document.getElementById('plotlyChart'); // as PlotlyJS.PlotlyHTMLElement
-    let xWindowString: string = "";
-    let yWindowString: string = "";
+  // Adds a listener to 
+  addGraphListeners(): void {
     let isMousedown: boolean = false;
-    
-    var xaxis = plotlyChart._fullLayout.xaxis;
-    var yaxis = plotlyChart._fullLayout.yaxis;
-    var l = plotlyChart._fullLayout.margin.l;
-    var t = plotlyChart._fullLayout.margin.t;  
 
+    this.plotlyChart.addEventListener('mousedown', () => {
+      isMousedown = true;
+    });
 
-    //plotlyChart.on('plotly_click', (data: { points: string | any[]; }) => {
-    //  var pts = '';
-    //
-    //  for (var i = 0; i < data.points.length; i++) {
-    //    pts = 'x = ' + data.points[i].x + '\ny = ' +
-    //      data.points[i].y!.toString() + '\n\n';
-    //  }
-    //
-    //  alert('Closest point clicked:\n\n' + pts);
-    //});
-    
-    //plotlyChart.on('plotly_click', function(data: any) {
+    // Plotly uses its own set of listeners that is almost only for selecting points, so regular listeners sometimes don't
+    // work. Originally, this was supposed to be only a mouseup event, which doesn't work on the graph.
+    this.plotlyChart.addEventListener('mouseover', () => {
+      if (isMousedown) {
+        isMousedown = false;
+        PlotlyJS.deleteTraces('plotlyChart', [0]);
+        PlotlyJS.addTraces('plotlyChart', [this.getTrace([])]);
 
-      plotlyChart.addEventListener('mousedown', (evt: any) => {
-        console.log("in mousedown")
-        isMousedown = true;
-        this.xWindowLower = xaxis.p2c(evt.x - l).toString();
-        this.yWindowLower = yaxis.p2c(evt.y - t).toString();
+        this.xWindowLower = this.plotlyChart._fullLayout.xaxis.range[0];
+        this.xWindowUpper = this.plotlyChart._fullLayout.xaxis.range[1];
+        this.yWindowLower = this.plotlyChart._fullLayout.yaxis.range[0];
+        this.yWindowUpper = this.plotlyChart._fullLayout.yaxis.range[1];
         
-        //PlotlyJS.relayout(plotlyChart, {'title': ['x: ' + xInDataCoord, 'y : ' + yInDataCoord].join('<br>')});
-    
-      });
-      
-      //plotlyChart.addEventListener('mouseup', (evt: any) => {
-      //  console.log("in mouseup event");
-      //  isMousedown = false;
-      //  this.xWindowUpper = xaxis.p2c(evt.x - l).toString();
-      //  this.yWindowUpper = yaxis.p2c(evt.y - t).toString();
-      //});
+        this.findTrace();
+      }
+    });
+  }
 
-        plotlyChart.addEventListener('mouseover', (evt: any) => {
-          if (isMousedown) {
-            console.log("in mouseover event");
-            isMousedown = false;
-            this.xWindowUpper = xaxis.p2c(evt.x - l).toString();
-            this.yWindowUpper = yaxis.p2c(evt.y - t).toString();
+  getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
+    var trace: Partial<PlotlyJS.PlotData> = {
+      x: points.map(point => point.xcoord),
+      y: points.map(point => point.ycoord),
+      mode: 'markers',
+      name: ``,
+      marker: {
+        color: 'rgb(102,0,0)',
+        size: 2,
+        opacity: .6
+      },
+      type: 'scatter',
+      // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
+      // as something like 4 + -3i. 
+      hovertemplate: `%{x}+%{y}i`
+    };
 
-            //PlotlyJS.purge('plotlyChart');
-        
-            this.createGraph();
-          }
-        });
-
-    //});
+    return trace;
   }
   
   findTrace(): void {
@@ -119,9 +103,9 @@ export class MandelbrotComponent implements OnInit {
     let points: Point[] = [];
     this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
 
-    // The setTimeouts are to get plotlyJS time to create and update the graph.
-    //setTimeout(() => {
+    console.time('time to graph');
 
+    // The setTimeouts are to give plotlyJS time to update the graph.
     for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); this.isLessThanOrEqualTo(xVal, this.math.bignumber(this.xWindowUpper)); 
     xVal = xVal.plus(this.xStepDistance)) {
       setTimeout(() => {
@@ -136,10 +120,12 @@ export class MandelbrotComponent implements OnInit {
 
           console.log("Total points: " + this.pointCount);
         }
-      
       }, 0)
     }
-    //});
+    
+    setTimeout(() => {
+      console.timeEnd('time to graph');
+    }, 0);
   }
 
   getNewPoints(xVal: BigNumber): Point[] {
@@ -283,26 +269,6 @@ export class MandelbrotComponent implements OnInit {
 
   getGraph(points: Point[]): void {
     PlotlyJS.extendTraces("plotlyChart", {x: [points.map(point => point.xcoord)], y: [points.map(point => point.ycoord)]}, [0]);
-  }
-
-  getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
-    var trace: Partial<PlotlyJS.PlotData> = {
-      x: points.map(point => point.xcoord),
-      y: points.map(point => point.ycoord),
-      mode: 'markers',
-      name: ``,
-      marker: {
-        color: 'rgb(102,0,0)',
-        size: 2,
-        opacity: .6
-      },
-      type: 'scatter',
-      // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
-      // as something like 4 + -3i. 
-      hovertemplate: `%{x}+%{y}i`
-    };
-
-    return trace;
   }
 
   ngOnInit(): void {
