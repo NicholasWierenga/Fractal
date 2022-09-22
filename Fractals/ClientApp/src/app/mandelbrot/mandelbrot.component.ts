@@ -19,28 +19,28 @@ export class MandelbrotComponent implements OnInit {
     randomSeed: null
   };
   math: MathJsStatic = create(all, this.config);
-  xSteps: number = 50;
-  ySteps: number = 50;
+  xSteps: number = 30;
+  ySteps: number = 30;
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
   yWindowLower: string = "-1.15";
   yWindowUpper: string = "1.15";
-  secondPass: boolean = true; // Will be used in the future for a button on the front-end.
+  secondPass: boolean = false; // Will be used in the future for a button on the front-end.
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
-  timesToCalculate: number = 10;
+  timesToCalculate: number = 100;
   pointCount: number = 0;
   plotlyChart: any;
 
   constructor() { } 
 
   createGraph(): void {
-    this.pointCount = 0;
-
     let layout: Partial<PlotlyJS.Layout> = {
       xaxis: {range: [this.xWindowLower, this.xWindowUpper]},
       yaxis: {range: [this.yWindowLower, this.yWindowUpper]},
-      showlegend: false
+      showlegend: false,
+      height: 600,
+      width: 600,
     };
 
     PlotlyJS.newPlot("plotlyChart", [this.getTrace([])], layout).then(() => {
@@ -52,7 +52,10 @@ export class MandelbrotComponent implements OnInit {
     });
   }
 
-  // Adds a listener to 
+  // TODO: An issue occurs if the user selects before the graph is fully finished. I think the
+  // fix for this was to disable dragmode in the layout along with the listeners. After the graph is
+  // finished, then add those back in.
+  // Adds a listener to the graph and finds the new points in the selected window.
   addGraphListeners(): void {
     let isMousedown: boolean = false;
 
@@ -99,6 +102,7 @@ export class MandelbrotComponent implements OnInit {
   }
   
   findTrace(): void {
+    this.pointCount = 0;
     let count: number = 0;
     let points: Point[] = [];
     this.xStepDistance = this.math.bignumber(this.xWindowUpper).minus(this.math.bignumber(this.xWindowLower)).div(this.xSteps);
@@ -128,6 +132,7 @@ export class MandelbrotComponent implements OnInit {
     }, 0);
   }
 
+  // TODO: We want to color points according to how many iterations it took to find them, so maybe put that in as a z-value?
   getNewPoints(xVal: BigNumber): Point[] {
     let points: Point[] = [];
     this.yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
@@ -137,7 +142,8 @@ export class MandelbrotComponent implements OnInit {
         if (this.vibeCheck(xVal, yVal, this.timesToCalculate)) {
           points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
 
-          points.push(...this.findNeighbors(xVal, yVal, this.math.bignumber("2")));
+          // Upping the bignumber below makes the graph slower and increases resolution.
+          points.push(...this.findNeighbors(xVal, yVal, this.math.bignumber("5")));
         }
       }
 
@@ -178,7 +184,13 @@ export class MandelbrotComponent implements OnInit {
   // set of numbers which that is rarely ever reached. Instead, these numbers 'vibrate' around the numbers
   // This function determines if there exists a trend for the number being looked at.
   vibeCheck(startReal: BigNumber, startImaginary: BigNumber, passNum?: number, seedReal?: BigNumber, seedImaginary?: BigNumber): boolean {
-    let epsilon: BigNumber = this.math.bignumber(1 / this.timesToCalculate);
+    const windowArea: BigNumber = this.math.bignumber(this.xWindowUpper).minus(this.xWindowLower).times(
+      this.math.bignumber(this.yWindowUpper).minus(this.yWindowLower));
+
+    //let epsilon: BigNumber = this.math.bignumber(1 / this.timesToCalculate);
+    // TODO: Think up a better way to get epsilon here. This feels weird and dividing by anything but 1 slows down the program.
+    const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToCalculate).mul(4));
+    //let epsilon: BigNumber = this.math.bignumber(".01");
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
@@ -189,15 +201,21 @@ export class MandelbrotComponent implements OnInit {
       }
       else {
         pointVal = this.squareThenAdd(pointVal, `${startReal.toString()} + ${startImaginary.toString()}i`);
+
+        // Every so many iterations, we check to see if the point is flying off to infinity. If it is, it's not in the
+        // set and so we don't bother calculating any further. This saves a fair bit of time.
+        if (count % 3 === 0 && !this.checkComplexDifference(`${startReal} + ${startImaginary}i`, pointVal)) {
+          return false;
+        }
       }
 
       previousVals.forEach(val => {
         if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
         &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
-                         this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
-         isIn = true;
+                          this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
+          isIn = true;
 
-         return;
+          return;
         }
       });
 
@@ -245,6 +263,31 @@ export class MandelbrotComponent implements OnInit {
       .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
   }
 
+  // Returns true if both complex numbers are somewhat near each other. False if they are not.
+  checkComplexDifference(firstComplex: string, secondComplex: string): boolean {
+    let firstReal: string = firstComplex.split(" ")[0];
+    let firstImaginary: string = "0";
+    if (firstComplex.includes("i")) {
+      firstImaginary = firstComplex.split(" ")[2].replace("i", "");
+    }
+    
+    let secondReal: string = secondComplex.split(" ")[0];
+    let secondImaginary: string = "0";
+    if (secondComplex.includes("i")) {
+      secondImaginary = secondComplex.split(" ")[2].replace("i", "");
+    }
+
+    let firstMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(firstReal).pow(2).plus(this.math.bignumber(firstImaginary).pow(2)));
+    let secondMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(secondReal).pow(2).plus(this.math.bignumber(secondImaginary).pow(2)));
+
+    if (this.isLessThanOrEqualTo(secondMagnitude, firstMagnitude.times(3))) {
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
   // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
   // Because of that, these functions should act as a workaround for comparing two very small numbers.
   isEqual(leftNumber: BigNumber, rightNumber: BigNumber, overrideEpsilon?: BigNumber): boolean {
@@ -259,8 +302,8 @@ export class MandelbrotComponent implements OnInit {
     return this.math.isNegative(leftNumber.minus(rightNumber));
   }
 
-  isLessThanOrEqualTo(leftNumber: BigNumber, rightNumber: BigNumber): boolean {
-    if (this.isEqual(leftNumber, rightNumber)) {
+  isLessThanOrEqualTo(leftNumber: BigNumber, rightNumber: BigNumber, overrideEpsilon?: BigNumber): boolean {
+    if (this.isEqual(leftNumber, rightNumber, overrideEpsilon ?? this.math.bignumber(this.config.epsilon))) {
       return true;
     }
 
@@ -291,3 +334,9 @@ export class MandelbrotComponent implements OnInit {
 // Later TODO: Add a function to test data after the graph is finished. This function would look for
 // duplicate points. This is to ensure that the findNeighbors() function isn't adding in and calculating
 // unnecessarily.
+
+// Later TODO: Color each point according to the amount of steps it needed to be retried before a pattern was found.
+
+// Later TODO: Calculate everything, but for each iteration, add those points and color them whatever. Then add in the
+// next extendTrace the newly found points, and so on an so forth. This would show the user an image that is slowly
+// getting more and more defined, and could let us have some button to click and check the next iteration.
