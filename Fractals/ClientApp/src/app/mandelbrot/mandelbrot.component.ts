@@ -19,8 +19,8 @@ export class MandelbrotComponent implements OnInit {
     randomSeed: null
   };
   math: MathJsStatic = create(all, this.config);
-  xSteps: number = 30;
-  ySteps: number = 30;
+  xSteps: number = 10;
+  ySteps: number = 10;
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
   yWindowLower: string = "-1.15";
@@ -28,7 +28,8 @@ export class MandelbrotComponent implements OnInit {
   secondPass: boolean = false; // Will be used in the future for a button on the front-end.
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
-  timesToCalculate: number = 100;
+  timesToCalculate: number = 150;
+  neighborsToCheck: number = 4;
   pointCount: number = 0;
   plotlyChart: any;
 
@@ -89,8 +90,8 @@ export class MandelbrotComponent implements OnInit {
       name: ``,
       marker: {
         color: 'rgb(102,0,0)',
-        size: 2,
-        opacity: .6
+        size: 5,
+        opacity: .33
       },
       type: 'scatter',
       // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
@@ -143,7 +144,7 @@ export class MandelbrotComponent implements OnInit {
           points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
 
           // Upping the bignumber below makes the graph slower and increases resolution.
-          points.push(...this.findNeighbors(xVal, yVal, this.math.bignumber("5")));
+          points.push(...this.findNeighbors(xVal, yVal));
         }
       }
 
@@ -152,15 +153,17 @@ export class MandelbrotComponent implements OnInit {
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see if the
   // neighboring points are valid also.
-  findNeighbors(xVal: BigNumber, yVal: BigNumber, neighborsToCheck: BigNumber): Point[] {
+  findNeighbors(xVal: BigNumber, yVal: BigNumber): Point[] {
     let points: Point[] = [];
 
     // When a point is found, there's other points found nearby that are also in the set.
     // This loop looks through nearby points to see if they are also good.
-    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance); this.isLessThan(nearXVal, xVal.plus(this.xStepDistance)); 
-    nearXVal = nearXVal.plus(this.xStepDistance.div(neighborsToCheck))) {
-      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance); this.isLessThan(nearYVal, yVal.plus(this.yStepDistance)); 
-      nearYVal = nearYVal.plus(this.yStepDistance.div(neighborsToCheck))) {
+    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(this.xStepDistance.div(this.neighborsToCheck).div(2)); 
+    this.isLessThan(nearXVal, xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(this.neighborsToCheck))); 
+    nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck).div(2))) {
+      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(this.yStepDistance.div(this.neighborsToCheck).div(2)); 
+      this.isLessThan(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(this.neighborsToCheck))); 
+      nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck).div(2))) {
         // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
         // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
 
@@ -186,75 +189,71 @@ export class MandelbrotComponent implements OnInit {
   vibeCheck(startReal: BigNumber, startImaginary: BigNumber, passNum?: number, seedReal?: BigNumber, seedImaginary?: BigNumber): boolean {
     const windowArea: BigNumber = this.math.bignumber(this.xWindowUpper).minus(this.xWindowLower).times(
       this.math.bignumber(this.yWindowUpper).minus(this.yWindowLower));
-
-    //let epsilon: BigNumber = this.math.bignumber(1 / this.timesToCalculate);
-    // TODO: Think up a better way to get epsilon here. This feels weird and dividing by anything but 1 slows down the program.
+    // TODO: The program doesn't handle zooming in quite right. The fractal should go on forever, but because this.timesToCalculate
+    // is set to some constant, it probably acts as a limiter. Maybe use windowArea to calculate timesToCalculate?
     const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToCalculate).mul(4));
-    //let epsilon: BigNumber = this.math.bignumber(".01");
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
 
     for (let count: number = 0; count < this.timesToCalculate; count++) {
       if (count == 0) {
-        pointVal = this.squareThenAdd(`${seedReal || 0} + ${seedImaginary || 0}i`, `${startReal} + ${startImaginary}i`);
+        pointVal = this.squareThenAdd(`${seedReal || "0"} + ${seedImaginary || "0"}i`, `${startReal} + ${startImaginary}i`);
       }
       else {
-        pointVal = this.squareThenAdd(pointVal, `${startReal.toString()} + ${startImaginary.toString()}i`);
+        pointVal = this.squareThenAdd(pointVal, `${startReal} + ${startImaginary}i`);
+      }
 
-        // Every so many iterations, we check to see if the point is flying off to infinity. If it is, it's not in the
-        // set and so we don't bother calculating any further. This saves a fair bit of time.
-        if (count % 3 === 0 && !this.checkComplexDifference(`${startReal} + ${startImaginary}i`, pointVal)) {
-          return false;
+      // Numbers not in the set usually fly off to infinity.
+      if (pointVal.includes("NaN") || pointVal.includes("Infinity")) {
+        return false;
+      }
+
+      // Trends in numbers can take quite a few iterations before being found, so to avoid searching the array
+      // for an equalish number it is only checked every so often.
+      if (!isIn && count % 10 === 0) {
+        for (let val of previousVals) {
+          if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
+          &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
+                           this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
+            isIn = true;
+  
+            break;
+          }
         }
       }
 
-      previousVals.forEach(val => {
-        if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
-        &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
-                          this.math.bignumber(pointVal.split(" ")[2].replace("i", "")), epsilon)) {
-          isIn = true;
-
-          return;
-        }
-      });
-
-      if (isIn) {
-        // Doing a second pass allows the program to weed out points that were erroneously passed earlier. It also allows
-        // for points that did not pass up to this point to not be checked further as they're likely not supposed to be in the
-        // set, which saves a lot of the calculations.
-        if (passNum == 1 && this.secondPass) {
-          // TODO: Try getting this to fire only after previousVals is filled. It could be the case that we find a point
-          // that happens to be quite close to a previous one and lead the point to be a false positive. It could also pose
-          // issues because timesToCalculate is used to determine how strict comparisons must be to say there is a trend.
-          return this.vibeCheck(this.math.bignumber(pointVal.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[2]
-          .replace("i", "")), 2, startReal, startImaginary);
-        }
-        else {
-          return true;
-        }
+      // If a valid point is found, we continue the iterations to get a good pointVal, but we don't need to add it into
+      // this array, as we're never looking at it again after a good point is found.
+      if (!isIn) {
+        previousVals.push(pointVal);
       }
-
-      previousVals.push(pointVal);
     }
 
-    return false;
+    if (isIn) {
+      // Doing a second pass allows the program to weed out points that were erroneously passed earlier. It also allows
+      // for points that did not pass up to this point to not be checked further as they're likely not supposed to be in the
+      // set, which saves a lot of the calculations.
+      if (passNum == 1 && this.secondPass) {
+        return this.vibeCheck(this.math.bignumber(pointVal.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[2]
+        .replace("i", "")), 2, startReal, startImaginary);
+      }
+      else {
+        return true;
+      }
+    }
+    else {
+      return false;
+    }
   }
 
   // Using MathJS pow and add cause floating point errors when working with complex-type numbers, so we pass 
   // strings for complex numbers over here and do the math with them and then returns a precise complex number as a string.
   squareThenAdd(currentComplex: string, addComplex: string): string {
     let currentReal: string = currentComplex.split(" ")[0];
-    let currentImaginary: string = "0";
-    if (currentComplex.includes("i")) {
-      currentImaginary = currentComplex.split(" ")[2].replace("i", "");
-    }
-    
+    let currentImaginary: string = currentComplex.split(" ")[2].replace("i", "");
     let addReal: string = addComplex.split(" ")[0];
-    let addImaginary: string = "0";
-    if (addComplex.includes("i")) {
-      addImaginary = addComplex.split(" ")[2].replace("i", "");
-    }
+    let addImaginary: string = addComplex.split(" ")[2].replace("i", "");
 
     // This looks random, but is the result of combining like terms for 
     // the expression (currentReal+currentImaginary*i)^2+(addReal + addImaginary*i).
@@ -263,30 +262,26 @@ export class MandelbrotComponent implements OnInit {
       .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
   }
 
+  // This currently is never called, but might be in the future, so it will be left in.
   // Returns true if both complex numbers are somewhat near each other. False if they are not.
-  checkComplexDifference(firstComplex: string, secondComplex: string): boolean {
-    let firstReal: string = firstComplex.split(" ")[0];
-    let firstImaginary: string = "0";
-    if (firstComplex.includes("i")) {
-      firstImaginary = firstComplex.split(" ")[2].replace("i", "");
-    }
-    
-    let secondReal: string = secondComplex.split(" ")[0];
-    let secondImaginary: string = "0";
-    if (secondComplex.includes("i")) {
-      secondImaginary = secondComplex.split(" ")[2].replace("i", "");
-    }
-
-    let firstMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(firstReal).pow(2).plus(this.math.bignumber(firstImaginary).pow(2)));
-    let secondMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(secondReal).pow(2).plus(this.math.bignumber(secondImaginary).pow(2)));
-
-    if (this.isLessThanOrEqualTo(secondMagnitude, firstMagnitude.times(3))) {
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
+  //checkComplexDifference(firstComplex: string, secondComplex: string): boolean {
+  //  let firstReal: string = firstComplex.split(" ")[0];
+  //  let firstImaginary: string = firstComplex.split(" ")[2].replace("i", "");
+  //  let secondReal: string = secondComplex.split(" ")[0];
+  //  let secondImaginary: string = secondComplex.split(" ")[2].replace("i", "");
+//
+  //  let firstMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(firstReal).pow(2)
+  //  .plus(this.math.bignumber(firstImaginary).pow(2)));
+  //  let secondMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(secondReal)
+  //  .pow(2).plus(this.math.bignumber(secondImaginary).pow(2)));
+//
+  //  if (this.isLessThanOrEqualTo(secondMagnitude, firstMagnitude.times(4))) {
+  //    return true;
+  //  }
+  //  else {
+  //    return false;
+  //  }
+  //}
 
   // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
   // Because of that, these functions should act as a workaround for comparing two very small numbers.
