@@ -19,8 +19,6 @@ export class MandelbrotComponent implements OnInit {
     randomSeed: null
   };
   math: MathJsStatic = create(all, this.config);
-  xSteps: number = 10;
-  ySteps: number = 10;
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
   yWindowLower: string = "-1.15";
@@ -28,10 +26,17 @@ export class MandelbrotComponent implements OnInit {
   secondPass: boolean = false; // Will be used in the future for a button on the front-end.
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
-  timesToCalculate: number = 150;
-  neighborsToCheck: number = 4;
   pointCount: number = 0;
   plotlyChart: any;
+  // Below act as controls for the resolution of the graph. x/ySteps affects the amount of points 
+  // tested on the graph. neighborsToCheck is the amount of points near to any good point found
+  // that will also be checked. timesToIterate is the maximum amount of times a point is iterated
+  // to determine if it is in the set or not. Upping the value of any of these improves resolution,
+  // but at the cost of performance.
+  xSteps: number = 50;
+  ySteps: number = 50;
+  neighborsToCheck: number = 2;
+  timesToIterate: number = 150;
 
   constructor() { } 
 
@@ -90,8 +95,8 @@ export class MandelbrotComponent implements OnInit {
       name: ``,
       marker: {
         color: 'rgb(102,0,0)',
-        size: 5,
-        opacity: .33
+        size: 1,
+        opacity: 1
       },
       type: 'scatter',
       // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
@@ -117,7 +122,7 @@ export class MandelbrotComponent implements OnInit {
         points.push(...this.getNewPoints(xVal));
         count++;
         
-        if (count % 10 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
+        if (count % 5 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
           this.pointCount += points.length;
           this.getGraph(points);
 
@@ -140,7 +145,7 @@ export class MandelbrotComponent implements OnInit {
 
       for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
       yVal = yVal.plus(this.yStepDistance)) {
-        if (this.vibeCheck(xVal, yVal, this.timesToCalculate)) {
+        if (this.vibeCheck(xVal, yVal)) {
           points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
 
           // Upping the bignumber below makes the graph slower and increases resolution.
@@ -152,18 +157,17 @@ export class MandelbrotComponent implements OnInit {
   }
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see if the
-  // neighboring points are valid also.
+  // neighboring points are valid also. This works by finding a square of points around the xVal+yVali, then checking each,
+  // point there.
   findNeighbors(xVal: BigNumber, yVal: BigNumber): Point[] {
     let points: Point[] = [];
-
-    // When a point is found, there's other points found nearby that are also in the set.
-    // This loop looks through nearby points to see if they are also good.
-    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(this.xStepDistance.div(this.neighborsToCheck).div(2)); 
-    this.isLessThan(nearXVal, xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(this.neighborsToCheck))); 
-    nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck).div(2))) {
-      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(this.yStepDistance.div(this.neighborsToCheck).div(2)); 
-      this.isLessThan(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(this.neighborsToCheck))); 
-      nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck).div(2))) {
+    
+    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(this.xStepDistance.div(this.neighborsToCheck * 2 + 1)); 
+    this.isLessThanOrEqualTo(nearXVal, xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(2))); 
+    nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck * 2 + 1))) {
+      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(this.yStepDistance.div(this.neighborsToCheck * 2 + 1)); 
+      this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2))); 
+      nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck * 2 + 1))) {
         // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
         // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
 
@@ -191,12 +195,12 @@ export class MandelbrotComponent implements OnInit {
       this.math.bignumber(this.yWindowUpper).minus(this.yWindowLower));
     // TODO: The program doesn't handle zooming in quite right. The fractal should go on forever, but because this.timesToCalculate
     // is set to some constant, it probably acts as a limiter. Maybe use windowArea to calculate timesToCalculate?
-    const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToCalculate).mul(4));
+    const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToIterate).mul(1));
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
 
-    for (let count: number = 0; count < this.timesToCalculate; count++) {
+    for (let count: number = 0; count < this.timesToIterate; count++) {
       if (count == 0) {
         pointVal = this.squareThenAdd(`${seedReal || "0"} + ${seedImaginary || "0"}i`, `${startReal} + ${startImaginary}i`);
       }
@@ -257,8 +261,8 @@ export class MandelbrotComponent implements OnInit {
 
     // This looks random, but is the result of combining like terms for 
     // the expression (currentReal+currentImaginary*i)^2+(addReal + addImaginary*i).
-    return `${this.math.bignumber(currentReal).pow(2).add(this.math.bignumber(addReal))
-      .minus(this.math.bignumber(currentImaginary).pow(2))} + ${this.math.bignumber(currentReal)
+    return `${this.math.bignumber(currentReal).pow("2").add(this.math.bignumber(addReal))
+      .minus(this.math.bignumber(currentImaginary).pow("2"))} + ${this.math.bignumber(currentReal)
       .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
   }
 
