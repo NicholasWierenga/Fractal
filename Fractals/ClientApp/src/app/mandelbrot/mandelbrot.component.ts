@@ -33,9 +33,9 @@ export class MandelbrotComponent implements OnInit {
   // that will also be checked. timesToIterate is the maximum amount of times a point is iterated
   // to determine if it is in the set or not. Upping the value of any of these improves resolution,
   // but at the cost of performance.
-  xSteps: number = 10;
-  ySteps: number = 10;
-  neighborsToCheck: number = 2;
+  xSteps: number = 20;
+  ySteps: number = 20;
+  neighborsToCheck: number = 1;
   timesToIterate: number = 150;
 
   constructor() { } 
@@ -131,7 +131,7 @@ export class MandelbrotComponent implements OnInit {
         points.push(...this.getNewPoints(xVal));
         count++;
         
-        if (count % 5 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
+        if (count % 4 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
           this.pointCount += points.length;
           this.getGraph(points);
 
@@ -150,7 +150,7 @@ export class MandelbrotComponent implements OnInit {
   // TODO: We want to color points according to how many iterations it took to find them, so maybe put that in as a z-value?
   getNewPoints(xVal: BigNumber): Point[] {
     let points: Point[] = [];
-    let lastYVal: BigNumber;
+    let lastYVal: BigNumber| undefined;
     this.yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
 
     for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
@@ -158,125 +158,146 @@ export class MandelbrotComponent implements OnInit {
       if (this.vibeCheck(xVal, yVal)) {
         points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: null});
 
-        points.push(...this.findNeighbors(xVal, yVal));
+        if (this.neighborsToCheck > 0) {
+          points.push(...this.findNeighbors(xVal, yVal, false));
+        }
 
         lastYVal = yVal;
       }
+      //else if (lastYVal! !== undefined) {
+      //  if (this.neighborsToCheck > 0) {
+      //    points.push(...this.findNeighbors(xVal, lastYVal, false));
+      //  }
+//
+      //  lastYVal = undefined;
+      //}
     }
-
-    points.push(...this.findBorderPoints(points));
-    
-    //if (lastYVal! !== undefined) {
-    //  this.findBorderPoints(points).forEach((point) => {
-    //    points.push(...this.findNeighbors(this.math.bignumber(point.xcoord), this.math.bignumber(point.xcoord), true));
-    //  })
-    //}
 
     return points;
   }
 
   // TODO: This function only finds border points with a gap in y-values. In the future, x-value gaps will
   // also be returned.
-  findBorderPoints(points: Point[]): Point[] {
-    let gapX: boolean = false;
-    let gapY: boolean = false;
-    let borderPoints: Point[] = [];
-    let xPoints: Point[] = [];
-    let yPoints: Point[] = [];
-    let pointIndex: number = -1;
-    let previousPoint: Point | undefined;
-
-    // categorize points into xVals broken up into each small xValStep, then look up and down it. If there is no higher point,
-    // then that is a border points. If there is no lower point, then that is a border point. If there is a higher and lower point
-    // in the gap, then that is not a border point and should be skipped.
-    for (let nearXVal: BigNumber = this.math.bignumber(this.xWindowLower); 
-    this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper)); 
-    nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck * 2))) {
-      let lowestY: BigNumber;
-      let highestY: BigNumber;
-      previousPoint = undefined;
-      gapY = false;
-
-      xPoints = points.filter((point) => point.xcoord === nearXVal.toString());
-
-      xPoints.forEach((point, index) => {
-        if (lowestY === undefined || this.isLessThan(this.math.bignumber(point.ycoord), lowestY)) {
-          lowestY = this.math.bignumber(point.ycoord);
-        }
-
-        if (highestY === undefined || !this.isLessThanOrEqualTo(this.math.bignumber(point.ycoord), highestY)) {
-          highestY = this.math.bignumber(point.ycoord);
-        }
-
-        if (index === xPoints.length - 1) {
-          if (lowestY.toString() === highestY.toString()) {
-            borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
-          }
-          else {
-            borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
-            borderPoints.push({xcoord: nearXVal.toString(), ycoord: highestY.toString(), zcoord: null});
-          }
-        }
-      });
-
-      for (let nearYVal: BigNumber = this.math.bignumber(this.yWindowLower); 
-      this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper)); 
-      nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck * 2))) {
-        let pointIndex: number = xPoints.findIndex((point) => point.ycoord === nearYVal.toString());
-
-        if ((lowestY! !== undefined && nearYVal.toString() === lowestY!.toString()) 
-        || (highestY! !== undefined && nearYVal.toString() === highestY!.toString())) {
-          gapY = false;
-
-          previousPoint = undefined;
-          
-          continue;
-        }
-
-        if (pointIndex === -1) { // point does not exist
-          if (previousPoint !== undefined) {
-            borderPoints.push(previousPoint);
-          
-            previousPoint = undefined;
-          }
-
-          gapY = true;
-        }
-        else { // point does exist
-          if (gapY) {
-            borderPoints.push(xPoints[pointIndex]);
-          }
-
-          gapY = false;
-          
-          previousPoint = xPoints[pointIndex];
-        }
-      }
-    }
-
-    return borderPoints;
-  }
+  //findBorderPoints(points: Point[]): Point[] {
+  //  let gapX: boolean = false;
+  //  let gapY: boolean = false;
+  //  let borderPoints: Point[] = [];
+  //  let xPoints: Point[] = [];
+  //  let yPoints: Point[] = [];
+  //  let pointIndex: number = -1;
+  //  let previousPoint: Point | undefined;
+//
+  //  // categorize points into xVals broken up into each small xValStep, then look up and down it. If there is no higher point,
+  //  // then that is a border points. If there is no lower point, then that is a border point. If there is a higher and lower point
+  //  // in the gap, then that is not a border point and should be skipped.
+  //  for (let nearXVal: BigNumber = this.math.bignumber(this.xWindowLower); 
+  //  this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper)); 
+  //  nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck * 2))) {
+  //    let lowestY: BigNumber;
+  //    let highestY: BigNumber;
+  //    previousPoint = undefined;
+  //    gapY = false;
+//
+  //    xPoints = points.filter((point) => point.xcoord === nearXVal.toString());
+//
+  //    xPoints.forEach((point, index) => {
+  //      if (lowestY === undefined || this.isLessThan(this.math.bignumber(point.ycoord), lowestY)) {
+  //        lowestY = this.math.bignumber(point.ycoord);
+  //      }
+//
+  //      if (highestY === undefined || !this.isLessThanOrEqualTo(this.math.bignumber(point.ycoord), highestY)) {
+  //        highestY = this.math.bignumber(point.ycoord);
+  //      }
+//
+  //      if (index === xPoints.length - 1) {
+  //        if (lowestY.toString() === highestY.toString()) {
+  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
+  //        }
+  //        else {
+  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
+  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: highestY.toString(), zcoord: null});
+  //        }
+  //      }
+  //    });
+//
+  //    for (let nearYVal: BigNumber = this.math.bignumber(this.yWindowLower); 
+  //    this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper)); 
+  //    nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck * 2))) {
+  //      let pointIndex: number = xPoints.findIndex((point) => point.ycoord === nearYVal.toString());
+//
+  //      if ((lowestY! !== undefined && nearYVal.toString() === lowestY!.toString()) 
+  //      || (highestY! !== undefined && nearYVal.toString() === highestY!.toString())) {
+  //        gapY = false;
+//
+  //        previousPoint = undefined;
+  //        
+  //        continue;
+  //      }
+//
+  //      if (pointIndex === -1) { // point does not exist
+  //        if (previousPoint !== undefined) {
+  //          borderPoints.push(previousPoint);
+  //        
+  //          previousPoint = undefined;
+  //        }
+//
+  //        gapY = true;
+  //      }
+  //      else { // point does exist
+  //        if (gapY) {
+  //          borderPoints.push(xPoints[pointIndex]);
+  //        }
+//
+  //        gapY = false;
+  //        
+  //        previousPoint = xPoints[pointIndex];
+  //      }
+  //    }
+  //  }
+//
+  //  return borderPoints;
+  //}
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see if the
   // neighboring points are valid also. This works by finding a square of points around the xVal+yVali, then checking each,
   // point there.
   findNeighbors(xVal: BigNumber, yVal: BigNumber, tinyStep?: boolean): Point[] {
+    //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
+    let xSteps: BigNumber = this.xStepDistance.div((this.neighborsToCheck + 1) * 2);
+    let ySteps: BigNumber = this.yStepDistance.div((this.neighborsToCheck + 1) * 2);
+    if (tinyStep) {
+      xSteps = xSteps.div(3);
+      ySteps = ySteps.div(3);
+    }
     
-    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(this.xStepDistance.div(this.neighborsToCheck * 2)); 
+    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(xSteps); 
     this.isLessThanOrEqualTo(nearXVal, xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(2))); 
-    nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck * 2))) {
-      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(this.yStepDistance.div(this.neighborsToCheck * 2)); 
+    nearXVal = nearXVal.plus(xSteps)) {
+      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(ySteps); 
       this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2))); 
-      nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck * 2))) {
+      nearYVal = nearYVal.plus(ySteps)) {
+
+        if (!tinyStep && nearYVal.toString() === yVal.minus(this.yStepDistance.div(2)).plus(ySteps).toString()
+        &&  !this.vibeCheck(nearXVal, nearYVal.minus(ySteps))) {
+          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+        } 
+        else if (!tinyStep && nearYVal.toString() === yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2)).toString()
+        &&  !this.vibeCheck(nearXVal, nearYVal.plus(ySteps))) {
+          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+        } 
+        else if (!tinyStep && nearXVal.toString() === xVal.minus(this.xStepDistance.div(2)).plus(xSteps).toString()
+        &&  !this.vibeCheck(nearXVal.minus(xSteps), nearYVal)) {
+          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+        }
+        else if (!tinyStep && nearXVal.toString() === xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(2)).toString()
+        &&  !this.vibeCheck(nearXVal.plus(xSteps), nearYVal)) {
+          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+        }
         // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
         // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
-
         // To avoid calculating the point and re-adding the same point we already found prior to the loop.
         if (this.isEqual(nearXVal, xVal) && this.isEqual(nearYVal, yVal)) {
-          //console.log("in neighbor function, found seed point. THIS SHOULD PRINT");
-          //|| this.isLessThan(nearXVal.plus(xStepDistance.div(neighborsToCheck)), xVal.plus(xStepDistance)) 
-          //|| this.isLessThan(nearYVal.plus(yStepDistance.div(neighborsToCheck)), xVal.plus(yStepDistance))
           continue;
         }
 
