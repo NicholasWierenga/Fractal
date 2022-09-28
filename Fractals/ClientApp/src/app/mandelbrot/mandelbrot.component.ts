@@ -150,7 +150,7 @@ export class MandelbrotComponent implements OnInit {
   // TODO: We want to color points according to how many iterations it took to find them, so maybe put that in as a z-value?
   getNewPoints(xVal: BigNumber): Point[] {
     let points: Point[] = [];
-    let lastYVal: BigNumber| undefined;
+    let lastYVal: BigNumber | undefined;
     this.yStepDistance = this.math.bignumber(this.yWindowUpper).minus(this.math.bignumber(this.yWindowLower)).div(this.ySteps);
 
     for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
@@ -164,99 +164,17 @@ export class MandelbrotComponent implements OnInit {
 
         lastYVal = yVal;
       }
-      //else if (lastYVal! !== undefined) {
-      //  if (this.neighborsToCheck > 0) {
-      //    points.push(...this.findNeighbors(xVal, lastYVal, false));
-      //  }
-//
-      //  lastYVal = undefined;
-      //}
+      else if (lastYVal! !== undefined) {
+        if (this.neighborsToCheck > 0) {
+          points.push(...this.findNeighbors(xVal, lastYVal, true));
+        }
+
+        lastYVal = undefined;
+      }
     }
 
     return points;
   }
-
-  // TODO: This function only finds border points with a gap in y-values. In the future, x-value gaps will
-  // also be returned.
-  //findBorderPoints(points: Point[]): Point[] {
-  //  let gapX: boolean = false;
-  //  let gapY: boolean = false;
-  //  let borderPoints: Point[] = [];
-  //  let xPoints: Point[] = [];
-  //  let yPoints: Point[] = [];
-  //  let pointIndex: number = -1;
-  //  let previousPoint: Point | undefined;
-//
-  //  // categorize points into xVals broken up into each small xValStep, then look up and down it. If there is no higher point,
-  //  // then that is a border points. If there is no lower point, then that is a border point. If there is a higher and lower point
-  //  // in the gap, then that is not a border point and should be skipped.
-  //  for (let nearXVal: BigNumber = this.math.bignumber(this.xWindowLower); 
-  //  this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper)); 
-  //  nearXVal = nearXVal.plus(this.xStepDistance.div(this.neighborsToCheck * 2))) {
-  //    let lowestY: BigNumber;
-  //    let highestY: BigNumber;
-  //    previousPoint = undefined;
-  //    gapY = false;
-//
-  //    xPoints = points.filter((point) => point.xcoord === nearXVal.toString());
-//
-  //    xPoints.forEach((point, index) => {
-  //      if (lowestY === undefined || this.isLessThan(this.math.bignumber(point.ycoord), lowestY)) {
-  //        lowestY = this.math.bignumber(point.ycoord);
-  //      }
-//
-  //      if (highestY === undefined || !this.isLessThanOrEqualTo(this.math.bignumber(point.ycoord), highestY)) {
-  //        highestY = this.math.bignumber(point.ycoord);
-  //      }
-//
-  //      if (index === xPoints.length - 1) {
-  //        if (lowestY.toString() === highestY.toString()) {
-  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
-  //        }
-  //        else {
-  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: lowestY.toString(), zcoord: null});
-  //          borderPoints.push({xcoord: nearXVal.toString(), ycoord: highestY.toString(), zcoord: null});
-  //        }
-  //      }
-  //    });
-//
-  //    for (let nearYVal: BigNumber = this.math.bignumber(this.yWindowLower); 
-  //    this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper)); 
-  //    nearYVal = nearYVal.plus(this.yStepDistance.div(this.neighborsToCheck * 2))) {
-  //      let pointIndex: number = xPoints.findIndex((point) => point.ycoord === nearYVal.toString());
-//
-  //      if ((lowestY! !== undefined && nearYVal.toString() === lowestY!.toString()) 
-  //      || (highestY! !== undefined && nearYVal.toString() === highestY!.toString())) {
-  //        gapY = false;
-//
-  //        previousPoint = undefined;
-  //        
-  //        continue;
-  //      }
-//
-  //      if (pointIndex === -1) { // point does not exist
-  //        if (previousPoint !== undefined) {
-  //          borderPoints.push(previousPoint);
-  //        
-  //          previousPoint = undefined;
-  //        }
-//
-  //        gapY = true;
-  //      }
-  //      else { // point does exist
-  //        if (gapY) {
-  //          borderPoints.push(xPoints[pointIndex]);
-  //        }
-//
-  //        gapY = false;
-  //        
-  //        previousPoint = xPoints[pointIndex];
-  //      }
-  //    }
-  //  }
-//
-  //  return borderPoints;
-  //}
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see if the
   // neighboring points are valid also. This works by finding a square of points around the xVal+yVali, then checking each,
@@ -277,32 +195,35 @@ export class MandelbrotComponent implements OnInit {
       for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(ySteps); 
       this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2))); 
       nearYVal = nearYVal.plus(ySteps)) {
+        if (this.isLessThan(nearXVal, this.math.bignumber(this.xWindowLower))
+        ||  !this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper))
+        ||   this.isLessThan(nearYVal, this.math.bignumber(this.yWindowLower))
+        ||  !this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper))) {
+          continue;
+        }
 
-        if (!tinyStep && nearYVal.toString() === yVal.minus(this.yStepDistance.div(2)).plus(ySteps).toString()
-        &&  !this.vibeCheck(nearXVal, nearYVal.minus(ySteps))) {
-          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
-        } 
-        else if (!tinyStep && nearYVal.toString() === yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2)).toString()
-        &&  !this.vibeCheck(nearXVal, nearYVal.plus(ySteps))) {
-          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
-        } 
-        else if (!tinyStep && nearXVal.toString() === xVal.minus(this.xStepDistance.div(2)).plus(xSteps).toString()
-        &&  !this.vibeCheck(nearXVal.minus(xSteps), nearYVal)) {
-          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
-        }
-        else if (!tinyStep && nearXVal.toString() === xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(2)).toString()
-        &&  !this.vibeCheck(nearXVal.plus(xSteps), nearYVal)) {
-          points.push(...this.findNeighbors(nearXVal, nearYVal, true));
-        }
-        // TODO: Try to avoid checking points near edges. Right now, points on the edges or near them cause points to be found
-        // outside window range. Consider checking nearXVal and nearYVal so that they're in the windows.
         // To avoid calculating the point and re-adding the same point we already found prior to the loop.
         if (this.isEqual(nearXVal, xVal) && this.isEqual(nearYVal, yVal)) {
           continue;
         }
 
         if (this.vibeCheck(nearXVal, nearYVal)) {
-          points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
+          if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.minus(ySteps))) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          } 
+          else if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.plus(ySteps))) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          } 
+          else if (!tinyStep && !this.vibeCheck(nearXVal.minus(xSteps), nearYVal)) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          }
+          else if (!tinyStep && !this.vibeCheck(nearXVal.plus(xSteps), nearYVal)) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          }
+
+          if (tinyStep) {
+            points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
+          }
         }
       }
     }
@@ -388,27 +309,6 @@ export class MandelbrotComponent implements OnInit {
       .minus(this.math.bignumber(currentImaginary).pow("2"))} + ${this.math.bignumber(currentReal)
       .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
   }
-
-  // This currently is never called, but might be in the future, so it will be left in.
-  // Returns true if both complex numbers are somewhat near each other. False if they are not.
-  //checkComplexDifference(firstComplex: string, secondComplex: string): boolean {
-  //  let firstReal: string = firstComplex.split(" ")[0];
-  //  let firstImaginary: string = firstComplex.split(" ")[2].replace("i", "");
-  //  let secondReal: string = secondComplex.split(" ")[0];
-  //  let secondImaginary: string = secondComplex.split(" ")[2].replace("i", "");
-//
-  //  let firstMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(firstReal).pow(2)
-  //  .plus(this.math.bignumber(firstImaginary).pow(2)));
-  //  let secondMagnitude: BigNumber = this.math.sqrt(this.math.bignumber(secondReal)
-  //  .pow(2).plus(this.math.bignumber(secondImaginary).pow(2)));
-//
-  //  if (this.isLessThanOrEqualTo(secondMagnitude, firstMagnitude.times(4))) {
-  //    return true;
-  //  }
-  //  else {
-  //    return false;
-  //  }
-  //}
 
   // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
   // Because of that, these functions should act as a workaround for comparing two very small numbers.
