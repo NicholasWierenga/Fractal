@@ -36,7 +36,7 @@ export class MandelbrotComponent implements OnInit {
   xSteps: number = 20;
   ySteps: number = 20;
   neighborsToCheck: number = 1;
-  timesToIterate: number = 150;
+  timesToIterate: number = 200;
 
   constructor() { } 
 
@@ -103,11 +103,11 @@ export class MandelbrotComponent implements OnInit {
       mode: 'markers',
       name: ``,
       marker: {
-        color: 'rgb(102,0,0)',
+        color: 'rgb(0, 0, 255)',
         size: 1,
         opacity: .5
       },
-      type: 'scatter',
+      type: 'scattergl',
       // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
       // as something like 4 + -3i. 
       hovertemplate: `%{x}+%{y}i`
@@ -164,13 +164,13 @@ export class MandelbrotComponent implements OnInit {
 
         lastYVal = yVal;
       }
-      else if (lastYVal! !== undefined) {
-        if (this.neighborsToCheck > 0) {
-          points.push(...this.findNeighbors(xVal, lastYVal, true));
-        }
-
-        lastYVal = undefined;
-      }
+      //else if (lastYVal! !== undefined) {
+      //  if (this.neighborsToCheck > 0) {
+      //    points.push(...this.findNeighbors(xVal, lastYVal, true));
+      //  }
+//
+      //  lastYVal = undefined;
+      //}
     }
 
     return points;
@@ -182,19 +182,19 @@ export class MandelbrotComponent implements OnInit {
   findNeighbors(xVal: BigNumber, yVal: BigNumber, tinyStep?: boolean): Point[] {
     //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
-    let xSteps: BigNumber = this.xStepDistance.div((this.neighborsToCheck + 1) * 2);
-    let ySteps: BigNumber = this.yStepDistance.div((this.neighborsToCheck + 1) * 2);
+    let xStep: BigNumber = this.xStepDistance.div((this.neighborsToCheck + 1) * 2);
+    let yStep: BigNumber = this.yStepDistance.div((this.neighborsToCheck + 1) * 2);
     if (tinyStep) {
-      xSteps = xSteps.div(3);
-      ySteps = ySteps.div(3);
+      xStep = xStep.div(2);
+      yStep = yStep.div(2);
     }
     
-    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(xSteps); 
-    this.isLessThanOrEqualTo(nearXVal, xVal.plus(this.xStepDistance).minus(this.xStepDistance.div(2))); 
-    nearXVal = nearXVal.plus(xSteps)) {
-      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(ySteps); 
-      this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(this.yStepDistance.div(2))); 
-      nearYVal = nearYVal.plus(ySteps)) {
+    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(xStep); 
+    this.isLessThanOrEqualTo(nearXVal, xVal.plus(this.xStepDistance).minus(xStep)); 
+    nearXVal = nearXVal.plus(xStep)) {
+      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(yStep); 
+      this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(yStep)); 
+      nearYVal = nearYVal.plus(yStep)) {
         if (this.isLessThan(nearXVal, this.math.bignumber(this.xWindowLower))
         ||  !this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper))
         ||   this.isLessThan(nearYVal, this.math.bignumber(this.yWindowLower))
@@ -208,17 +208,21 @@ export class MandelbrotComponent implements OnInit {
         }
 
         if (this.vibeCheck(nearXVal, nearYVal)) {
-          if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.minus(ySteps))) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.minus(yStep))) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal.minus(yStep), true));
+            continue;
           } 
-          else if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.plus(ySteps))) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          else if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.plus(yStep))) {
+            points.push(...this.findNeighbors(nearXVal, nearYVal.plus(yStep), true));
+            continue;
           } 
-          else if (!tinyStep && !this.vibeCheck(nearXVal.minus(xSteps), nearYVal)) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          else if (!tinyStep && !this.vibeCheck(nearXVal.minus(xStep), nearYVal)) {
+            points.push(...this.findNeighbors(nearXVal.minus(xStep), nearYVal, true));
+            continue;
           }
-          else if (!tinyStep && !this.vibeCheck(nearXVal.plus(xSteps), nearYVal)) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal, true));
+          else if (!tinyStep && !this.vibeCheck(nearXVal.plus(xStep), nearYVal)) {
+            points.push(...this.findNeighbors(nearXVal.plus(xStep), nearYVal, true));
+            continue;
           }
 
           if (tinyStep) {
@@ -239,7 +243,8 @@ export class MandelbrotComponent implements OnInit {
       this.math.bignumber(this.yWindowUpper).minus(this.yWindowLower));
     // TODO: The program doesn't handle zooming in quite right. The fractal should go on forever, but because this.timesToCalculate
     // is set to some constant, it probably acts as a limiter. Maybe use windowArea to calculate timesToCalculate?
-    const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToIterate).mul(1));
+    const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToIterate));
+    //const epsilon: BigNumber = this.math.bignumber(.1);
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
@@ -259,7 +264,7 @@ export class MandelbrotComponent implements OnInit {
 
       // Trends in numbers can take quite a few iterations before being found, so to avoid searching the array
       // for an equalish number it is only checked every so often.
-      if (!isIn && count % 10 === 0) {
+      if (!isIn && count % 1 === 0) {
         for (let val of previousVals) {
           if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
           &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
@@ -268,6 +273,13 @@ export class MandelbrotComponent implements OnInit {
   
             break;
           }
+        }
+
+        
+        // If there isn't supposed to be a second pass done on the points, this will kick us
+        // out of the loop instead of continuing to calculate further values.
+        if (isIn && !this.secondPass) {
+          return true;
         }
       }
 
