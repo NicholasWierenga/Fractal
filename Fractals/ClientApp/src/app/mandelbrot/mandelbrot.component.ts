@@ -33,10 +33,10 @@ export class MandelbrotComponent implements OnInit {
   // that will also be checked. timesToIterate is the maximum amount of times a point is iterated
   // to determine if it is in the set or not. Upping the value of any of these improves resolution,
   // but at the cost of performance.
-  xSteps: number = 20;
-  ySteps: number = 20;
-  neighborsToCheck: number = 1;
-  timesToIterate: number = 200;
+  xSteps: number = 40;
+  ySteps: number = 40;
+  neighborsToCheck: number = 4;
+  timesToIterate: number = 150;
 
   constructor() { } 
 
@@ -103,8 +103,8 @@ export class MandelbrotComponent implements OnInit {
       mode: 'markers',
       name: ``,
       marker: {
-        color: 'rgb(0, 0, 255)',
-        size: 1,
+        color: 'rgb(0, 155, 255)',
+        size: 1.5,
         opacity: .5
       },
       type: 'scattergl',
@@ -164,13 +164,6 @@ export class MandelbrotComponent implements OnInit {
 
         lastYVal = yVal;
       }
-      //else if (lastYVal! !== undefined) {
-      //  if (this.neighborsToCheck > 0) {
-      //    points.push(...this.findNeighbors(xVal, lastYVal, true));
-      //  }
-//
-      //  lastYVal = undefined;
-      //}
     }
 
     return points;
@@ -182,23 +175,37 @@ export class MandelbrotComponent implements OnInit {
   findNeighbors(xVal: BigNumber, yVal: BigNumber, tinyStep?: boolean): Point[] {
     //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
-    let xStep: BigNumber = this.xStepDistance.div((this.neighborsToCheck + 1) * 2);
-    let yStep: BigNumber = this.yStepDistance.div((this.neighborsToCheck + 1) * 2);
+    let xStart: BigNumber = xVal.minus(this.xStepDistance.div(2));
+    let xEnd: BigNumber = xVal.plus(this.xStepDistance.div(2));
+    let xStep: BigNumber = this.xStepDistance.div(this.neighborsToCheck);
+    let yStart: BigNumber = yVal.minus(this.yStepDistance.div(2));
+    let yEnd: BigNumber = yVal.plus(this.yStepDistance.div(2));
+    let yStep: BigNumber = this.yStepDistance.div(this.neighborsToCheck);
+
     if (tinyStep) {
       xStep = xStep.div(2);
       yStep = yStep.div(2);
+      xStart = xVal.minus(this.xStepDistance.div(4));
+      xEnd = xVal.plus(this.xStepDistance.div(4));
+      yStart = yVal.minus(this.yStepDistance.div(4));
+      yEnd = yVal.plus(this.yStepDistance.div(4));
     }
     
-    for (let nearXVal: BigNumber = xVal.minus(this.xStepDistance.div(2)).plus(xStep); 
-    this.isLessThanOrEqualTo(nearXVal, xVal.plus(this.xStepDistance).minus(xStep)); 
-    nearXVal = nearXVal.plus(xStep)) {
-      for (let nearYVal: BigNumber = yVal.minus(this.yStepDistance.div(2)).plus(yStep); 
-      this.isLessThanOrEqualTo(nearYVal, yVal.plus(this.yStepDistance).minus(yStep)); 
-      nearYVal = nearYVal.plus(yStep)) {
-        if (this.isLessThan(nearXVal, this.math.bignumber(this.xWindowLower))
-        ||  !this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper))
-        ||   this.isLessThan(nearYVal, this.math.bignumber(this.yWindowLower))
-        ||  !this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper))) {
+    for (let nearXVal: BigNumber = xStart; this.isLessThan(nearXVal, xEnd); nearXVal = nearXVal.plus(xStep)) {
+      if (this.isLessThan(nearXVal, this.math.bignumber(this.xWindowLower))
+     ||  !this.isLessThanOrEqualTo(nearXVal, this.math.bignumber(this.xWindowUpper))) {
+        console.log("Skipping out-of-window point. Non-useful x-value.");
+        console.log(`nearXVal: ${nearXVal.toString()}`);
+
+        continue;
+      }
+
+      for (let nearYVal: BigNumber = yStart; this.isLessThan(nearYVal, yEnd); nearYVal = nearYVal.plus(yStep)) {
+        if (this.isLessThan(nearYVal, this.math.bignumber(this.yWindowLower))
+       ||  !this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper))) {
+          console.log("Skipping out-of-window point. Non-useful y-value.");
+          console.log(`nearYVal: ${nearYVal.toString()}`);
+
           continue;
         }
 
@@ -208,26 +215,24 @@ export class MandelbrotComponent implements OnInit {
         }
 
         if (this.vibeCheck(nearXVal, nearYVal)) {
-          if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.minus(yStep))) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal.minus(yStep), true));
-            continue;
-          } 
-          else if (!tinyStep && !this.vibeCheck(nearXVal, nearYVal.plus(yStep))) {
-            points.push(...this.findNeighbors(nearXVal, nearYVal.plus(yStep), true));
-            continue;
-          } 
-          else if (!tinyStep && !this.vibeCheck(nearXVal.minus(xStep), nearYVal)) {
-            points.push(...this.findNeighbors(nearXVal.minus(xStep), nearYVal, true));
-            continue;
-          }
-          else if (!tinyStep && !this.vibeCheck(nearXVal.plus(xStep), nearYVal)) {
-            points.push(...this.findNeighbors(nearXVal.plus(xStep), nearYVal, true));
-            continue;
+          if (!tinyStep) {
+            if (!this.vibeCheck(nearXVal, nearYVal.minus(yStep))) {
+              points.push(...this.findNeighbors(nearXVal, nearYVal.minus(yStep), true));
+            } 
+            if (!this.vibeCheck(nearXVal, nearYVal.plus(yStep))) {
+              points.push(...this.findNeighbors(nearXVal, nearYVal.plus(yStep), true));
+            } 
+            if (!this.vibeCheck(nearXVal.minus(xStep), nearYVal)) {
+              points.push(...this.findNeighbors(nearXVal.minus(xStep), nearYVal, true));
+            }
+            if (!this.vibeCheck(nearXVal.plus(xStep), nearYVal)) {
+              points.push(...this.findNeighbors(nearXVal.plus(xStep), nearYVal, true));
+            }
           }
 
-          if (tinyStep) {
+          //if (tinyStep) {
             points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
-          }
+          //}
         }
       }
     }
@@ -244,7 +249,7 @@ export class MandelbrotComponent implements OnInit {
     // TODO: The program doesn't handle zooming in quite right. The fractal should go on forever, but because this.timesToCalculate
     // is set to some constant, it probably acts as a limiter. Maybe use windowArea to calculate timesToCalculate?
     const epsilon: BigNumber = windowArea.div(this.math.bignumber(this.timesToIterate));
-    //const epsilon: BigNumber = this.math.bignumber(.1);
+    //const epsilon: BigNumber = this.math.bignumber(.01);
     let previousVals: string[] = [];
     let pointVal: string = "";
     let isIn: boolean = false;
@@ -261,10 +266,15 @@ export class MandelbrotComponent implements OnInit {
       if (pointVal.includes("NaN") || pointVal.includes("Infinity")) {
         return false;
       }
+      else if (!isIn && count + 1 === this.timesToIterate) {
+        console.log("point found that failed to diverge, but also didn't show pattern");
+
+        isIn = true;
+      }
 
       // Trends in numbers can take quite a few iterations before being found, so to avoid searching the array
       // for an equalish number it is only checked every so often.
-      if (!isIn && count % 1 === 0) {
+      if (!isIn && count % 10 === 0) {
         for (let val of previousVals) {
           if (this.isEqual(this.math.bignumber(val.split(" ")[0]), this.math.bignumber(pointVal.split(" ")[0]), epsilon)
           &&  this.isEqual(this.math.bignumber(val.split(" ")[2].replace("i", "")), 
@@ -277,7 +287,7 @@ export class MandelbrotComponent implements OnInit {
 
         
         // If there isn't supposed to be a second pass done on the points, this will kick us
-        // out of the loop instead of continuing to calculate further values.
+        // out instead of continuing to calculate further values.
         if (isIn && !this.secondPass) {
           return true;
         }
@@ -320,6 +330,12 @@ export class MandelbrotComponent implements OnInit {
     return `${this.math.bignumber(currentReal).pow("2").add(this.math.bignumber(addReal))
       .minus(this.math.bignumber(currentImaginary).pow("2"))} + ${this.math.bignumber(currentReal)
       .times(this.math.bignumber(currentImaginary)).times("2").plus(this.math.bignumber(addImaginary))}i`;
+  }
+
+  complexMagnitude(complex: string): string {
+    
+
+    return "";
   }
 
   // MathJS comparers like lessThan or equals are only accurate for numbers that are sufficiently large.
