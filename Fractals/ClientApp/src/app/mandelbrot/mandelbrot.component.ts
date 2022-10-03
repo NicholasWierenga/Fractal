@@ -27,7 +27,9 @@ export class MandelbrotComponent implements OnInit {
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
   pointCount: number = 0;
-  testCount: number = 0;
+  skippedCount: number = 0;
+  iterationsSkipped: number = 0;
+  pointsWithShortIterations: number = 0;
   plotlyChart: any;
 
   // Below act as controls for the resolution of the graph. x/ySteps affects the amount of points 
@@ -35,8 +37,8 @@ export class MandelbrotComponent implements OnInit {
   // that will also be checked. timesToIterate is the maximum amount of times a point is iterated
   // to determine if it is in the set or not. Upping the value of any of these improves resolution,
   // but at the cost of performance.
-  xSteps: number = 200;
-  ySteps: number = 200;
+  xSteps: number = 300;
+  ySteps: number = 300;
   neighborsToCheck: number = 2;
   timesToIterate: number = 255;
 
@@ -100,14 +102,14 @@ export class MandelbrotComponent implements OnInit {
 
   getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
     var trace: Partial<PlotlyJS.PlotData> = {
-      x: points.map(point => point.ycoord),
-      y: points.map(point => point.zcoord),
+      x: points.map(point => point.xcoord),
+      y: points.map(point => point.ycoord),
       mode: 'markers',
       name: ``,
       marker: {
         //cmin: 0,
         //cmax: 255,
-        color: points.map(point => `rgb(${point.zcoord}, ${point.zcoord}, ${point.zcoord})`),
+        color: points.map(point => `rgb(${point.xcoord}, ${point.xcoord}, ${point.zcoord})`),
         autocolorscale: false,
         size: 1.5,
         //colorscale: `[[0, 'rgb(0, 0, 0)'], [1, 'rgb(255, 255, 255)']]`,
@@ -135,21 +137,39 @@ export class MandelbrotComponent implements OnInit {
     for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
     xVal = xVal.plus(this.xStepDistance)) {
       setTimeout(() => {
+        // This variable is used for when the program is looking through large chunks of the graph where all the points
+        // are in the set. This slows the program down and we can be reasonably sure if the past several points were in the set,
+        // then the next one is likely to be in there also. Because of this, the variable is used to cut down on the number of
+        // iterations needed to be done when prior points have passed.
+        let precedingPointsFound: number = 0;
+
         for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
         yVal = yVal.plus(this.yStepDistance)) {
-          let pointData: [boolean, number] = this.vibeCheck(xVal.toString(), yVal.toString());
+          let iterationsPassed: number;
 
-        // TODO: We want to color points according to how many iterations it took to find them. Try splitting up points
-        // when it passes the count if below into chunks and for each chunk, extend it to the correct trace.
-        // The graph will then consist of several traces, but each one is a different color.
-        // The z value will be used to determine what color should be used.
-          if (pointData[0]) {
+          if (precedingPointsFound >= 3) {
+            iterationsPassed = this.vibeCheck(xVal.toString(), yVal.toString(), precedingPointsFound);
 
+            this.pointsWithShortIterations++;
+          }
+          else {
+            iterationsPassed = this.vibeCheck(xVal.toString(), yVal.toString());
+          }
+
+          // TODO: this.timesToIterate should be upped as the window becomes smaller.
+          // This value can cause points to be passed when they shouldn't be and even without
+          // that problem, looking near the 'edges' requires a greater amount of iterations regardless.
+          if (iterationsPassed === this.timesToIterate) {
+            precedingPointsFound++;
             //if (this.neighborsToCheck > 0) {
             //  points.push(...this.findNeighbors(xVal, yVal, false));
             //}
           }
-          points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: pointData[1].toString()});
+          else {
+            precedingPointsFound = 0;
+          }
+
+          points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: iterationsPassed.toString()});
         }
 
         count++;
@@ -161,68 +181,71 @@ export class MandelbrotComponent implements OnInit {
 
           console.log("Total points: " + this.pointCount);
         }
-      }, 0)
+      }, 0);
     }
     
+    // Used only to keep track of performance and other data to be logged after all points are graphed.
     setTimeout(() => {
       console.timeEnd('time to graph');
 
-      console.log(`Amount of points skipped due to precision-size: ${this.testCount}`)
+      console.log(`Amount of points skipped due to precision-size limit: ${this.skippedCount}.`);
+      this.skippedCount = 0;
+
+      console.log(`Amount of iterations skipped due to precedingPointsFound logic: ${this.iterationsSkipped}.`);
+      this.iterationsSkipped = 0;
+
+      console.log(`Amount of points with a shorter than normal amount of iterations: ${this.pointsWithShortIterations}.`);
+      this.pointsWithShortIterations = 0;
     }, 0);
   }
 
-  getColor(point: Point): string {
-    //let splitPoints: Point[][] = [[], [], [], [], [], [], [], [], [], []];
-//
-    //points.forEach((point) => {
-    //  let splitIndex: number = 0;
-    //  let colorNum: number = Number.parseInt(point.zcoord!);
-//
-    //  while (colorNum > 0) {
-    //    colorNum -= 25;
-    //    splitIndex++;
-    //  }
-//
-//
-    //})
-    //splitPoints.push(points);
-//
-    //return points;
-    return '#FF0000';
-  }
-
-  // Numbers found in the Mandelbrot Set are found through taking 
-  vibeCheck(startReal: string, startImaginary: string): [boolean, number] {
+  // Numbers in the Mandelbrot Set are found through squaring and adding it's starting values.
+  // This looks like z1 = a + bi, where z1 is some complex number, a is startReal, and b is startImaginary.
+  // We then square z1 and add z1 to get z2 = z1^2 + c1. Then we do it again, which yields z3 = z2^2 + z1,
+  // then z4 = z3^2 + z1, and so on. If the square of the magnitude of the complex number stays less than 4 (going
+  // above this indicates the sequence of c's will explode to infinity) after this.timesToIterate, then that point is
+  // in the Mandelbrot Set. If not, we return the amount of iterations it took before it was found to be divergent.
+  vibeCheck(startReal: string, startImaginary: string, precedingPointsFound?: number): number {
     let complex: string[] = this.squareThenAdd("0", "0", startReal, startImaginary);
-    
     let magnitudeSquared: string = this.math.bignumber(complex[0]).pow(2).plus(this.math.bignumber(complex[1])).pow(2).toString();
-    let previousMagnitude: string = "";
+    let previousMagnitude: string = magnitudeSquared;
+    let iterationCount: number = 1;
+    precedingPointsFound = precedingPointsFound || 1;
+    let endIterationAmount: number = 0.5 * (this.timesToIterate + (this.timesToIterate / (precedingPointsFound + 1)));
 
-
-    for (let i: number = 0; i < this.timesToIterate; i++) {
-      // Often numbers reach a point in the loop where they're no longer changing.
-      // This occurs due to precision being too low, but when it does occur, this if kicks
-      // us out to avoid looping any further, which saves a lot of cost.
-      if (previousMagnitude === magnitudeSquared) {
-        this.testCount++;
-        
-        return [true, this.timesToIterate];
-      }
-
-      previousMagnitude = magnitudeSquared;
-
+    while (iterationCount <= endIterationAmount) {
       complex = this.squareThenAdd(complex[0], complex[1], startReal, startImaginary);
 
       magnitudeSquared = this.math.bignumber(complex[0]).pow(2).plus(this.math.bignumber(complex[1])).pow(2).toString();
 
+      // Often numbers reach a point in the loop where their magnitude is no longer changing.
+      // This occurs due to precision being too low, but when it does occur, this kicks
+      // us out to avoid looping any further, which saves some cost.
+      if (previousMagnitude === magnitudeSquared) {
+        this.skippedCount++;
+        
+        return this.timesToIterate;
+      }
+
+      previousMagnitude = magnitudeSquared;
+
       // If the sum of the squares of the real and imaginary components of a complex number are greater than 4
       // then that means that the number will fly off to infinity if it were iterated more, so it can't be the set.
       if (this.math.bignumber(magnitudeSquared).greaterThan(4)) {
-        return [false, i];
+        return iterationCount;
       }
+
+      iterationCount++;
     }
 
-    return [true, this.timesToIterate];
+    if (precedingPointsFound >= 2) {
+      this.iterationsSkipped += this.timesToIterate - iterationCount;
+
+      return this.timesToIterate;
+    }
+    else {
+      return this.timesToIterate;
+    }
   }
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see 
