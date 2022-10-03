@@ -29,6 +29,7 @@ export class MandelbrotComponent implements OnInit {
   pointCount: number = 0;
   testCount: number = 0;
   plotlyChart: any;
+
   // Below act as controls for the resolution of the graph. x/ySteps affects the amount of points 
   // tested on the graph. neighborsToCheck is the amount of points near to any good point found
   // that will also be checked. timesToIterate is the maximum amount of times a point is iterated
@@ -37,7 +38,7 @@ export class MandelbrotComponent implements OnInit {
   xSteps: number = 200;
   ySteps: number = 200;
   neighborsToCheck: number = 2;
-  timesToIterate: number = 250;
+  timesToIterate: number = 255;
 
   constructor() { } 
 
@@ -99,13 +100,17 @@ export class MandelbrotComponent implements OnInit {
 
   getTrace(points: Point[]): Partial<PlotlyJS.PlotData> {
     var trace: Partial<PlotlyJS.PlotData> = {
-      x: points.map(point => point.xcoord),
-      y: points.map(point => point.ycoord),
+      x: points.map(point => point.ycoord),
+      y: points.map(point => point.zcoord),
       mode: 'markers',
       name: ``,
       marker: {
-        color: 'rgb(0, 155, 255)',
+        //cmin: 0,
+        //cmax: 255,
+        color: points.map(point => `rgb(${point.zcoord}, ${point.zcoord}, ${point.zcoord})`),
+        autocolorscale: false,
         size: 1.5,
+        //colorscale: `[[0, 'rgb(0, 0, 0)'], [1, 'rgb(255, 255, 255)']]`,
         opacity: .5
       },
       type: 'scattergl',
@@ -139,17 +144,16 @@ export class MandelbrotComponent implements OnInit {
         // The graph will then consist of several traces, but each one is a different color.
         // The z value will be used to determine what color should be used.
           if (pointData[0]) {
-            points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: pointData[1].toString()});
 
             //if (this.neighborsToCheck > 0) {
             //  points.push(...this.findNeighbors(xVal, yVal, false));
             //}
           }
-          
+          points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: pointData[1].toString()});
         }
 
         count++;
-        if (count % 10 === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
+        if (count % this.math.floor(this.xSteps / 10) === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
           this.pointCount += points.length;
           this.getGraph(points);
 
@@ -167,22 +171,42 @@ export class MandelbrotComponent implements OnInit {
     }, 0);
   }
 
+  getColor(point: Point): string {
+    //let splitPoints: Point[][] = [[], [], [], [], [], [], [], [], [], []];
+//
+    //points.forEach((point) => {
+    //  let splitIndex: number = 0;
+    //  let colorNum: number = Number.parseInt(point.zcoord!);
+//
+    //  while (colorNum > 0) {
+    //    colorNum -= 25;
+    //    splitIndex++;
+    //  }
+//
+//
+    //})
+    //splitPoints.push(points);
+//
+    //return points;
+    return '#FF0000';
+  }
+
   // Numbers found in the Mandelbrot Set are found through taking 
   vibeCheck(startReal: string, startImaginary: string): [boolean, number] {
-    let complex: string[] = this.squareThenAdd(startReal, startImaginary, startReal, startImaginary);
+    let complex: string[] = this.squareThenAdd("0", "0", startReal, startImaginary);
     
     let magnitudeSquared: string = this.math.bignumber(complex[0]).pow(2).plus(this.math.bignumber(complex[1])).pow(2).toString();
     let previousMagnitude: string = "";
 
 
-    for (let i: number = 2; i < this.timesToIterate; i++) {
+    for (let i: number = 0; i < this.timesToIterate; i++) {
       // Often numbers reach a point in the loop where they're no longer changing.
       // This occurs due to precision being too low, but when it does occur, this if kicks
       // us out to avoid looping any further, which saves a lot of cost.
       if (previousMagnitude === magnitudeSquared) {
         this.testCount++;
         
-        return [true, i];
+        return [true, this.timesToIterate];
       }
 
       previousMagnitude = magnitudeSquared;
@@ -204,6 +228,9 @@ export class MandelbrotComponent implements OnInit {
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see 
   // if the neighboring points are valid also. This works by finding a square of points around the xVal+yVali, 
   // then checking each, point there.
+  // TODO: Take in a chunk of points, iterate through that to find borders, then loop through that, centering the new
+  // findNeighbors call around the step above or below the current point. Checking the points to the left
+  // and right probably is not necessary.
   findNeighbors(xVal: BigNumber, yVal: BigNumber, tinyStep?: boolean): Point[] {
     //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
@@ -303,7 +330,11 @@ export class MandelbrotComponent implements OnInit {
   }
 
   getGraph(points: Point[]): void {
-    PlotlyJS.extendTraces("plotlyChart", {x: [points.map(point => point.xcoord)], y: [points.map(point => point.ycoord)]}, [0]);
+    PlotlyJS.extendTraces("plotlyChart", {
+      x: [points.map(point => point.xcoord)], 
+      y: [points.map(point => point.ycoord)],
+      'marker.color': [points.map(point => point.zcoord)]
+    }, [0]);
   }
 
   ngOnInit(): void {
