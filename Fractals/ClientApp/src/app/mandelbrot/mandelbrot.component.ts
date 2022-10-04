@@ -19,6 +19,8 @@ export class MandelbrotComponent implements OnInit {
     randomSeed: null
   };
   math: MathJsStatic = create(all, this.config);
+  // TODO: Add some logic to compare window value to determine window-dimension ratio. Then use that to determine
+  // how many steps to take along the x and y axes so that the graph doesn't feel so rectangle-y like it does now.
   xWindowLower: string = "-2";
   xWindowUpper: string = ".5";
   yWindowLower: string = "-1.15";
@@ -26,11 +28,13 @@ export class MandelbrotComponent implements OnInit {
   secondPass: boolean = false; // Will be used in the future for a button on the front-end.
   xStepDistance!: BigNumber;
   yStepDistance!: BigNumber;
+  plotlyChart: any;
   pointCount: number = 0;
   skippedCount: number = 0;
   iterationsSkipped: number = 0;
   pointsWithShortIterations: number = 0;
-  plotlyChart: any;
+  pointsInSet: number = 0;
+  neighboringPointsFound: number = 0;
 
   // Below act as controls for the resolution of the graph. x/ySteps affects the amount of points 
   // tested on the graph. neighborsToCheck is the amount of points near to any good point found
@@ -39,7 +43,9 @@ export class MandelbrotComponent implements OnInit {
   // but at the cost of performance.
   xSteps: number = 300;
   ySteps: number = 300;
-  neighborsToCheck: number = 2;
+  // TODO: Because neighboring points are so densely-packed, anything beyond 1 makes the edges look
+  // blurry or 'washed-out' with the same color of points. These points should be tinier than normal.
+  neighborsToCheck: number = 1;
   timesToIterate: number = 255;
 
   constructor() { } 
@@ -60,6 +66,7 @@ export class MandelbrotComponent implements OnInit {
       showlegend: false,
       height: 600,
       width: 600,
+      hovermode: false,
     };
 
     PlotlyJS.newPlot("plotlyChart", [this.getTrace([])], layout).then(() => {
@@ -109,16 +116,13 @@ export class MandelbrotComponent implements OnInit {
       marker: {
         //cmin: 0,
         //cmax: 255,
-        color: points.map(point => `rgb(${point.xcoord}, ${point.xcoord}, ${point.zcoord})`),
+        color: points.map(point => `rgb(${point.zcoord}, ${point.zcoord}, ${point.zcoord})`),
         autocolorscale: false,
-        size: 1.5,
+        size: 1.0,
         //colorscale: `[[0, 'rgb(0, 0, 0)'], [1, 'rgb(255, 255, 255)']]`,
-        opacity: .5
+        opacity: 1
       },
-      type: 'scattergl',
-      // TODO: Points graphed on a complex plane should shown as x + yi instead of (x, y). Find some way to do that that won't show up
-      // as something like 4 + -3i. 
-      hovertemplate: `%{x}+%{y}i`
+      type: 'scattergl'
     };
 
     return trace;
@@ -134,52 +138,77 @@ export class MandelbrotComponent implements OnInit {
     console.time('time to graph');
 
     // The setTimeouts are to give plotlyJS time to update the graph.
-    for (let xVal: BigNumber = this.math.bignumber(this.xWindowLower); xVal.lessThanOrEqualTo(this.xWindowUpper); 
-    xVal = xVal.plus(this.xStepDistance)) {
+    for (let real: BigNumber = this.math.bignumber(this.xWindowLower); real.lessThanOrEqualTo(this.xWindowUpper); 
+    real = real.plus(this.xStepDistance)) {
       setTimeout(() => {
         // This variable is used for when the program is looking through large chunks of the graph where all the points
         // are in the set. This slows the program down and we can be reasonably sure if the past several points were in the set,
         // then the next one is likely to be in there also. Because of this, the variable is used to cut down on the number of
         // iterations needed to be done when prior points have passed.
         let precedingPointsFound: number = 0;
+        // Stores previous point in-set that is used to find points near to for when an out-of-set point is found.
+        // Once it's been used, it is set back to undefined. While it is undefined, it is used to indicate to the program
+        // when it found the end of out-of-set points and so it will find the neighboring points to that new in-set point.
+        let previousInSetPoint: Point | undefined = undefined; 
 
-        for (let yVal: BigNumber = this.math.bignumber(this.yWindowLower); yVal.lessThanOrEqualTo(this.yWindowUpper); 
-        yVal = yVal.plus(this.yStepDistance)) {
+        for (let imaginary: BigNumber = this.math.bignumber(this.yWindowLower); imaginary.lessThanOrEqualTo(this.yWindowUpper); 
+        imaginary = imaginary.plus(this.yStepDistance)) {
           let iterationsPassed: number;
 
           if (precedingPointsFound >= 3) {
-            iterationsPassed = this.vibeCheck(xVal.toString(), yVal.toString(), precedingPointsFound);
+            iterationsPassed = this.vibeCheck(real.toString(), imaginary.toString(), precedingPointsFound);
 
             this.pointsWithShortIterations++;
           }
           else {
-            iterationsPassed = this.vibeCheck(xVal.toString(), yVal.toString());
+            iterationsPassed = this.vibeCheck(real.toString(), imaginary.toString());
           }
+
+          // TODO: Try messing around with criteria for being in previousInSetPoint. Currently, a point has
+          // to be in the set, but sometimes points are nearly in, and those could be useful to find neighbors for also.
+          // Additionally, this could look like an if for some number near this.timesToIterate, but not this.timesToIterate.
+          // this would mean previousInSetPoint doesn't need to be changed.
+
+          let newPoint: Point = {xcoord: real.toString(), ycoord: imaginary.toString(), zcoord: iterationsPassed.toString()};
 
           // TODO: this.timesToIterate should be upped as the window becomes smaller.
           // This value can cause points to be passed when they shouldn't be and even without
           // that problem, looking near the 'edges' requires a greater amount of iterations regardless.
           if (iterationsPassed === this.timesToIterate) {
             precedingPointsFound++;
-            //if (this.neighborsToCheck > 0) {
-            //  points.push(...this.findNeighbors(xVal, yVal, false));
-            //}
+            this.pointsInSet++;
+
+            // To find neighboring points of the first in-set point after any amount of out-of-set points.
+            if (this.neighborsToCheck > 0 && previousInSetPoint === undefined) {
+              points.push(...this.findNeighbors(newPoint, false));
+            }
+
+            previousInSetPoint = newPoint;
           }
           else {
             precedingPointsFound = 0;
+
+            // To find neighboring points of the previous in-set point if we didn't already.
+            if (this.neighborsToCheck > 0 && previousInSetPoint !== undefined) {
+              points.push(...this.findNeighbors(previousInSetPoint, false));
+
+              previousInSetPoint = undefined; // to prevent the same point being used again during a string of out-of-set points.
+            }
           }
 
-          points.push({xcoord: xVal.toString(), ycoord: yVal.toString(), zcoord: iterationsPassed.toString()});
+          points.push(newPoint);
         }
 
         count++;
-        if (count % this.math.floor(this.xSteps / 10) === 0 || this.isEqual(xVal, this.math.bignumber(this.xWindowUpper))) {
+        // This is so users don't sit and look at a blank graph until it pops in at once.
+        if (count % this.math.floor(this.xSteps / 10) === 0 || this.isEqual(real, this.math.bignumber(this.xWindowUpper))) {
           this.pointCount += points.length;
+
           this.getGraph(points);
 
           points = [];
 
-          console.log("Total points: " + this.pointCount);
+          console.log(`Total points: ${this.pointCount} with ${this.pointsInSet} in the set.`);
         }
       }, 0);
     }
@@ -187,6 +216,9 @@ export class MandelbrotComponent implements OnInit {
     // Used only to keep track of performance and other data to be logged after all points are graphed.
     setTimeout(() => {
       console.timeEnd('time to graph');
+
+      console.log (`Amount of neighboring points found: ${this.neighboringPointsFound}.`)
+      this.neighboringPointsFound = 0;
 
       console.log(`Amount of points skipped due to precision-size limit: ${this.skippedCount}.`);
       this.skippedCount = 0;
@@ -196,6 +228,9 @@ export class MandelbrotComponent implements OnInit {
 
       console.log(`Amount of points with a shorter than normal amount of iterations: ${this.pointsWithShortIterations}.`);
       this.pointsWithShortIterations = 0;
+
+      console.log(`Amount of points in the Mandelbrot Set using the ${this.timesToIterate} iteration limit: ${this.pointsInSet}.`);
+      this.pointsInSet = 0;
     }, 0);
   }
 
@@ -210,7 +245,7 @@ export class MandelbrotComponent implements OnInit {
     let magnitudeSquared: string = this.math.bignumber(complex[0]).pow(2).plus(this.math.bignumber(complex[1])).pow(2).toString();
     let previousMagnitude: string = magnitudeSquared;
     let iterationCount: number = 1;
-    precedingPointsFound = precedingPointsFound || 1;
+    precedingPointsFound = precedingPointsFound || 0;
     let endIterationAmount: number = 0.5 * (this.timesToIterate + (this.timesToIterate / (precedingPointsFound + 1)));
 
     while (iterationCount <= endIterationAmount) {
@@ -238,14 +273,11 @@ export class MandelbrotComponent implements OnInit {
       iterationCount++;
     }
 
-    if (precedingPointsFound >= 2) {
+    if (precedingPointsFound >= 1) {
       this.iterationsSkipped += this.timesToIterate - iterationCount;
+    }
 
-      return this.timesToIterate;
-    }
-    else {
-      return this.timesToIterate;
-    }
+    return this.timesToIterate;
   }
 
   // Finds and checks nearby points to entered point. This is to run every time a valid point is find to see 
@@ -254,16 +286,18 @@ export class MandelbrotComponent implements OnInit {
   // TODO: Take in a chunk of points, iterate through that to find borders, then loop through that, centering the new
   // findNeighbors call around the step above or below the current point. Checking the points to the left
   // and right probably is not necessary.
-  findNeighbors(xVal: BigNumber, yVal: BigNumber, tinyStep?: boolean): Point[] {
+  findNeighbors(point: Point, tinyStep?: boolean): Point[] {
     //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
-    let xStart: BigNumber = xVal.minus(this.xStepDistance.times(1).div(3));
-    let yStart: BigNumber = yVal.minus(this.yStepDistance.times(1).div(3));
-    let xEnd: BigNumber = xVal.plus(this.xStepDistance.times(1).div(3));
-    let yEnd: BigNumber = yVal.plus(this.yStepDistance.times(1).div(3));
-    let xStep: BigNumber = this.xStepDistance.times(1).div(3).div(this.neighborsToCheck);
-    let yStep: BigNumber = this.yStepDistance.times(1).div(3).div(this.neighborsToCheck);
+    let xStart: BigNumber = this.math.bignumber(point.xcoord).minus(this.xStepDistance.div(2));
+    let yStart: BigNumber = this.math.bignumber(point.ycoord).minus(this.yStepDistance.div(2));
+    let xEnd: BigNumber = this.math.bignumber(point.xcoord).plus(this.xStepDistance.div(2));
+    let yEnd: BigNumber = this.math.bignumber(point.ycoord).plus(this.yStepDistance.div(2));
+    let xStep: BigNumber = this.xStepDistance.div(2).div(this.neighborsToCheck);
+    let yStep: BigNumber = this.yStepDistance.div(2).div(this.neighborsToCheck);
 
+    // NOTE: tinyStep was functionality that is not longer in use. It's still kept around incase it is needed later, but
+    // is left commented out. It was to take 'tiny steps' when a neighboring point failed to be in the set around that failed point.
     //if (tinyStep) {
     //  xStart = xVal.minus(this.xStepDistance.times(1).div(9));
     //  yStart = yVal.minus(this.yStepDistance.times(1).div(9));
@@ -283,6 +317,8 @@ export class MandelbrotComponent implements OnInit {
       }
 
       for (let nearYVal: BigNumber = yStart; this.isLessThanOrEqualTo(nearYVal, yEnd); nearYVal = nearYVal.plus(yStep)) {
+        let iterationsPassed: number = this.vibeCheck(nearXVal.toString(), nearYVal.toString());
+        
         if (this.isLessThan(nearYVal, this.math.bignumber(this.yWindowLower))
        ||  !this.isLessThanOrEqualTo(nearYVal, this.math.bignumber(this.yWindowUpper))) {
           console.log("Skipping out-of-window point. Non-useful y-value.");
@@ -292,11 +328,14 @@ export class MandelbrotComponent implements OnInit {
         }
 
         // To avoid calculating the point and re-adding the same point we already found prior to the loop.
-        if (this.isEqual(nearXVal, xVal) && this.isEqual(nearYVal, yVal)) {
+        if (this.isEqual(nearXVal, this.math.bignumber(point.xcoord)) && this.isEqual(nearYVal, this.math.bignumber(point.ycoord))) {
           continue;
         }
 
-        if (this.vibeCheck(nearXVal.toString(), nearYVal.toString())) {
+        points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: iterationsPassed.toString()});
+
+        if (iterationsPassed === this.timesToIterate) {
+          this.pointsInSet++;
           //if (!tinyStep) {
           //  if (!this.vibeCheck(nearXVal.toString(), nearYVal.minus(yStep).toString())) {
           //    points.push(...this.findNeighbors(nearXVal, nearYVal.minus(yStep), true));
@@ -313,11 +352,13 @@ export class MandelbrotComponent implements OnInit {
           //}
 
           //if (tinyStep) {
-            points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: null});
+            //points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: iterationsPassed.toString()});
           //}
         }
       }
     }
+
+    this.neighboringPointsFound += points.length;
 
     return points;
   }
