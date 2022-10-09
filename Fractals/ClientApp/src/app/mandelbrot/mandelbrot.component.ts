@@ -114,12 +114,9 @@ export class MandelbrotComponent implements OnInit {
       mode: 'markers',
       name: ``,
       marker: {
-        //cmin: 0,
-        //cmax: 255,
         color: points.map(point => `rgb(${point.zcoord}, ${point.zcoord}, ${point.zcoord})`),
         autocolorscale: false,
         size: 1.0,
-        //colorscale: `[[0, 'rgb(0, 0, 0)'], [1, 'rgb(255, 255, 255)']]`,
         opacity: 1
       },
       type: 'scattergl'
@@ -180,7 +177,7 @@ export class MandelbrotComponent implements OnInit {
 
             // To find neighboring points of the first in-set point after any amount of out-of-set points.
             if (this.neighborsToCheck > 0 && previousInSetPoint === undefined) {
-              points.push(...this.findNeighbors(newPoint, false));
+              points.push(...this.findNeighbors(newPoint));
             }
 
             previousInSetPoint = newPoint;
@@ -190,7 +187,7 @@ export class MandelbrotComponent implements OnInit {
 
             // To find neighboring points of the previous in-set point if we didn't already.
             if (this.neighborsToCheck > 0 && previousInSetPoint !== undefined) {
-              points.push(...this.findNeighbors(previousInSetPoint, false));
+              points.push(...this.findNeighbors(previousInSetPoint));
 
               previousInSetPoint = undefined; // to prevent the same point being used again during a string of out-of-set points.
             }
@@ -286,7 +283,7 @@ export class MandelbrotComponent implements OnInit {
   // TODO: Take in a chunk of points, iterate through that to find borders, then loop through that, centering the new
   // findNeighbors call around the step above or below the current point. Checking the points to the left
   // and right probably is not necessary.
-  findNeighbors(point: Point, tinyStep?: boolean): Point[] {
+  findNeighbors(point: Point): Point[] {
     //console.log(`in findNeighbors with (${xVal.toString()}, ${yVal.toString()}) with tinyStep: ${tinyStep!.toString()}`);
     let points: Point[] = [];
     let xStart: BigNumber = this.math.bignumber(point.xcoord).minus(this.xStepDistance.div(2));
@@ -295,17 +292,6 @@ export class MandelbrotComponent implements OnInit {
     let yEnd: BigNumber = this.math.bignumber(point.ycoord).plus(this.yStepDistance.div(2));
     let xStep: BigNumber = this.xStepDistance.div(2).div(this.neighborsToCheck);
     let yStep: BigNumber = this.yStepDistance.div(2).div(this.neighborsToCheck);
-
-    // NOTE: tinyStep was functionality that is not longer in use. It's still kept around incase it is needed later, but
-    // is left commented out. It was to take 'tiny steps' when a neighboring point failed to be in the set around that failed point.
-    //if (tinyStep) {
-    //  xStart = xVal.minus(this.xStepDistance.times(1).div(9));
-    //  yStart = yVal.minus(this.yStepDistance.times(1).div(9));
-    //  xEnd = xVal.plus(this.xStepDistance.times(1).div(9));
-    //  yEnd = yVal.plus(this.yStepDistance.times(1).div(9));
-    //  xStep = xStep.div(3);
-    //  yStep = yStep.div(3);
-    //}
     
     for (let nearXVal: BigNumber = xStart; this.isLessThanOrEqualTo(nearXVal, xEnd); nearXVal = nearXVal.plus(xStep)) {
       if (this.isLessThan(nearXVal, this.math.bignumber(this.xWindowLower))
@@ -336,24 +322,6 @@ export class MandelbrotComponent implements OnInit {
 
         if (iterationsPassed === this.timesToIterate) {
           this.pointsInSet++;
-          //if (!tinyStep) {
-          //  if (!this.vibeCheck(nearXVal.toString(), nearYVal.minus(yStep).toString())) {
-          //    points.push(...this.findNeighbors(nearXVal, nearYVal.minus(yStep), true));
-          //  } 
-          //  if (!this.vibeCheck(nearXVal.toString(), nearYVal.plus(yStep).toString())) {
-          //    points.push(...this.findNeighbors(nearXVal, nearYVal.plus(yStep), true));
-          //  } 
-          //  if (!this.vibeCheck(nearXVal.minus(xStep).toString(), nearYVal.toString())) {
-          //    points.push(...this.findNeighbors(nearXVal.minus(xStep), nearYVal, true));
-          //  }
-          //  if (!this.vibeCheck(nearXVal.plus(xStep).toString(), nearYVal.toString())) {
-          //    points.push(...this.findNeighbors(nearXVal.plus(xStep), nearYVal, true));
-          //  }
-          //}
-
-          //if (tinyStep) {
-            //points.push({xcoord: nearXVal.toString(), ycoord: nearYVal.toString(), zcoord: iterationsPassed.toString()});
-          //}
         }
       }
     }
@@ -410,6 +378,8 @@ export class MandelbrotComponent implements OnInit {
 // With that, add it to the lowerWindow and minus it from the upper window.
 // This would create the effect of nearly double the number of points.
 
+// Probably not doing this one, 2nd passes doesn't do much and takes a long time.
+// Doing it even more will give diminishing returns while taking even longer.
 // Later TODO: Instead of doing a 2nd pass, allow for n number of passes. Instead of using a 
 // bool to know if we should do another pass, have a pass number and keep decrementing it and
 // calling the function again until it hits a certain point and that will be the final pass.
@@ -422,8 +392,13 @@ export class MandelbrotComponent implements OnInit {
 // duplicate points. This is to ensure that the findNeighbors() function isn't adding in and calculating
 // unnecessarily.
 
-// Later TODO: Color each point according to the amount of steps it needed to be retried before a pattern was found.
+// Later TODO: Add a DB to save a graph to a table. When a button is cleared, retrieve those points and throw them
+// onto the graph. Also have a button to delete those points from the DB. This would use code like the one from
+// the Grapher program on my GitHub. In addition, this should also update the windowing variables here accordingly.
+// Tables should be named according to their windowed-values and saving should be
+// dis-allowed when current window-settings matches the naming scheme used in the DB. If naming the graphs in this way
+// causes odd behaviors, try naming them in a master table and then naming the table the pkID found in the master table instead.
 
-// Later TODO: Calculate everything, but for each iteration, add those points and color them whatever. Then add in the
-// next extendTrace the newly found points, and so on an so forth. This would show the user an image that is slowly
-// getting more and more defined, and could let us have some button to click and check the next iteration.
+// Later TODO: In addition to above, it would be nice to query a master table in the DB with the name of all used
+// tables for this set. If current windows matches any of those(hold them in an object array instead of constantly
+// calling the DB) then query that table for all of its point-data.
