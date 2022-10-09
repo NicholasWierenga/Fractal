@@ -56,12 +56,10 @@ export class MandelbrotComponent implements OnInit {
         range: [this.xWindowLower, this.xWindowUpper],
         showgrid: false,
         zeroline: false,
-        //visible: false
       },
       yaxis: {range: [this.yWindowLower, this.yWindowUpper],
         showgrid: false,
         zeroline: false,
-        //visible: false
       },
       showlegend: false,
       height: 600,
